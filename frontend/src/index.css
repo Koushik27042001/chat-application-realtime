@@ -1,0 +1,17 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Poppins:wght@500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply min-h-screen bg-mist font-body text-ink antialiased;
+  background-image:
+    radial-gradient(circle at top left, rgba(255, 122, 89, 0.22), transparent 28%),
+    radial-gradient(circle at top right, rgba(15, 118, 110, 0.18), transparent 24%),
+    linear-gradient(180deg, #f8fbff 0%, #eef7f8 100%);
+}
+
+#root {
+  @apply min-h-screen;
+}
