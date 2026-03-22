@@ -27,3 +27,12 @@ export const messageApi = {
   send: (token, payload) =>
     apiClient.post("/messages", payload, createAuthConfig(token)),
 };
+
+export const userApi = {
+  list: (token, search = "") => {
+    const query = search ? `?search=${encodeURIComponent(search)}` : "";
+    return apiClient.get(`/users${query}`, createAuthConfig(token));
+  },
+  get: (token, userId) =>
+    apiClient.get(`/users/${userId}`, createAuthConfig(token)),
+};

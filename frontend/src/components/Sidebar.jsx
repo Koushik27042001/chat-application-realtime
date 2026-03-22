@@ -13,12 +13,15 @@ const Sidebar = ({
         <p className="mt-1 text-sm text-slate-500">
           Signed in as {currentUser?.name || "Guest"}
         </p>
+        <p className="mt-1 text-xs text-slate-400">
+          Your user id: {currentUser?.id || "N/A"}
+        </p>
       </div>
 
       <div className="p-4">
         <input
           type="text"
-          placeholder="Search users..."
+          placeholder="Search users by name or id..."
           value={searchTerm}
           onChange={(event) => onSearchChange(event.target.value)}
           className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-coral"
@@ -48,6 +51,9 @@ const Sidebar = ({
                   <p className="truncate font-semibold">{contact.name}</p>
                   <p className={`truncate text-sm ${isActive ? "text-slate-300" : "text-slate-500"}`}>
                     {contact.lastMessage}
+                  </p>
+                  <p className={`truncate text-xs ${isActive ? "text-slate-400" : "text-slate-400"}`}>
+                    ID: {contact.id}
                   </p>
                 </div>
               </div>

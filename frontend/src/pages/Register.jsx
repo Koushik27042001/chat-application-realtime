@@ -5,11 +5,11 @@ import { useAuth } from "../context/AuthContext";
 
 const Register = () => {
   const navigate = useNavigate();
-  const { registerMock } = useAuth();
+  const { register } = useAuth();
   const [formData, setFormData] = useState({
-    name: "Demo User",
-    email: "demo@chatapp.com",
-    password: "123456",
+    name: "",
+    email: "",
+    password: "",
   });
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,10 +27,14 @@ const Register = () => {
     setIsSubmitting(true);
 
     try {
-      registerMock(formData);
+      await register(formData);
       navigate("/chat");
     } catch (requestError) {
-      setError(requestError.message || "Unable to register");
+      const message =
+        requestError?.response?.data?.message ||
+        requestError?.message ||
+        "Unable to register";
+      setError(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -42,7 +46,7 @@ const Register = () => {
         <div className="px-6 py-10 sm:px-10">
           <h2 className="font-display text-3xl font-semibold text-ink">Create account</h2>
           <p className="mt-2 text-sm text-slate-500">
-            Mock registration saves a local session and redirects into chat instantly.
+            Create an account to enter the chat workspace.
           </p>
 
           <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
@@ -82,22 +86,18 @@ const Register = () => {
             </button>
           </form>
 
-          <p className="mt-4 text-xs text-slate-400">
-            This account is stored only in local browser state for UI testing.
-          </p>
-
           <p className="mt-6 text-sm text-slate-500">
             Already registered? <Link className="font-semibold text-teal" to="/login">Login</Link>
           </p>
         </div>
 
         <div className="hidden bg-gradient-to-br from-coral via-[#ff9b73] to-[#ffd2bf] px-10 py-12 lg:block">
-          <p className="text-sm uppercase tracking-[0.3em] text-white/80">Dashboard first</p>
+          <p className="text-sm uppercase tracking-[0.3em] text-white/80">Welcome aboard</p>
           <h1 className="mt-5 font-display text-5xl font-semibold leading-tight text-white">
-            Build the complete chat UI before wiring production auth.
+            Your new account unlocks real-time conversations.
           </h1>
           <p className="mt-6 max-w-md text-sm text-white/90">
-            This keeps the product flow moving while the backend catches up.
+            Register once and jump straight into your chat workspace.
           </p>
         </div>
       </section>

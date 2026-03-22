@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
+import { authApi } from "../services/api";
+
 const AuthContext = createContext(null);
-const STORAGE_KEY = "chat-app-auth";
+const STORAGE_KEY = "chat-app-auth-v2";
 
 const persistAuth = (authData) => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(authData));
@@ -13,22 +15,59 @@ export const AuthProvider = ({ children }) => {
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
-    const storedAuth = localStorage.getItem(STORAGE_KEY);
+    let isMounted = true;
 
-    if (!storedAuth) {
-      setIsHydrated(true);
-      return;
-    }
+    const restoreSession = async () => {
+      const storedAuth = localStorage.getItem(STORAGE_KEY);
 
-    try {
-      const parsedAuth = JSON.parse(storedAuth);
-      setUser(parsedAuth.user ?? null);
-      setToken(parsedAuth.token ?? "");
-    } catch (error) {
-      localStorage.removeItem(STORAGE_KEY);
-    } finally {
-      setIsHydrated(true);
-    }
+      if (!storedAuth) {
+        if (isMounted) {
+          setIsHydrated(true);
+        }
+        return;
+      }
+
+      try {
+        const parsedAuth = JSON.parse(storedAuth);
+        const storedToken = parsedAuth?.token ?? "";
+
+        if (!storedToken) {
+          localStorage.removeItem(STORAGE_KEY);
+          return;
+        }
+
+        const { data } = await authApi.me(storedToken);
+
+        if (!isMounted) {
+          return;
+        }
+
+        const nextAuth = {
+          token: storedToken,
+          user: data.user,
+        };
+
+        setUser(nextAuth.user);
+        setToken(nextAuth.token);
+        persistAuth(nextAuth);
+      } catch (error) {
+        localStorage.removeItem(STORAGE_KEY);
+        if (isMounted) {
+          setUser(null);
+          setToken("");
+        }
+      } finally {
+        if (isMounted) {
+          setIsHydrated(true);
+        }
+      }
+    };
+
+    restoreSession();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const saveAuth = (authData) => {
@@ -37,37 +76,31 @@ export const AuthProvider = ({ children }) => {
     persistAuth(authData);
   };
 
-  const loginMock = ({ email, password }) => {
-    const nextAuth = {
-      token: `mock-token-${Date.now()}`,
-      user: {
-        id: "mock-user-1",
-        name: email?.split("@")[0] || "Demo User",
-        email,
-      },
-    };
-
+  const login = async ({ email, password }) => {
     if (!email || !password) {
       throw new Error("Email and password are required");
     }
+
+    const { data } = await authApi.login({ email, password });
+    const nextAuth = {
+      token: data.token,
+      user: data.user,
+    };
 
     saveAuth(nextAuth);
     return nextAuth;
   };
 
-  const registerMock = ({ name, email, password }) => {
-    const nextAuth = {
-      token: `mock-token-${Date.now()}`,
-      user: {
-        id: "mock-user-1",
-        name: name || "Demo User",
-        email,
-      },
-    };
-
+  const register = async ({ name, email, password }) => {
     if (!name || !email || !password) {
       throw new Error("Name, email, and password are required");
     }
+
+    const { data } = await authApi.register({ name, email, password });
+    const nextAuth = {
+      token: data.token,
+      user: data.user,
+    };
 
     saveAuth(nextAuth);
     return nextAuth;
@@ -86,8 +119,8 @@ export const AuthProvider = ({ children }) => {
         token,
         isHydrated,
         saveAuth,
-        loginMock,
-        registerMock,
+        login,
+        register,
         logout,
       }}
     >
