@@ -35,9 +35,9 @@ const userSchema = new mongoose.Schema({
         default: null,
     },
 
-    // Password reset (link-based)
-    resetToken: { type: String },
-    resetTokenExpire: { type: Date },
+    // Password reset (link-based) - store hashed token, send plain in URL
+    resetPasswordToken: { type: String },
+    resetPasswordExpire: { type: Date },
 
     // OTP-based reset
     otp: { type: String },

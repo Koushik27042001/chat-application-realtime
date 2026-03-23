@@ -12,10 +12,10 @@ const findMany = (filter = {}, options = {}) => {
   return User.find(filter).select(select).sort(sort).lean();
 };
 
-const findByResetToken = (token) =>
+const findByResetPasswordToken = (hashedToken) =>
   User.findOne({
-    resetToken: token,
-    resetTokenExpire: { $gt: Date.now() },
+    resetPasswordToken: hashedToken,
+    resetPasswordExpire: { $gt: Date.now() },
   });
 
 const findByEmailAndOtp = (email, otp) =>
@@ -30,6 +30,6 @@ module.exports = {
   findById,
   create,
   findMany,
-  findByResetToken,
+  findByResetPasswordToken,
   findByEmailAndOtp,
 };

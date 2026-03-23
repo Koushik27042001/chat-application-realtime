@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const userRepository = require("../repositories/user.repository");
-const { sendEmail } = require("../utils/email");
+const sendEmail = require("./email.service");
 
 const createToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
@@ -67,36 +67,49 @@ const forgotPasswordService = async (email) => {
   }
 
   const resetToken = crypto.randomBytes(32).toString("hex");
-  const resetTokenExpire = Date.now() + 10 * 60 * 1000; // 10 min
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
 
-  user.resetToken = resetToken;
-  user.resetTokenExpire = new Date(resetTokenExpire);
+  user.resetPasswordToken = hashedToken;
+  user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 min
   await user.save();
 
-  const baseUrl = process.env.FRONTEND_URL || process.env.CLIENT_URL || "http://localhost:5173";
-  const resetLink = `${baseUrl.replace(/\/$/, "")}/reset-password/${resetToken}`;
+  const baseUrl = (process.env.FRONTEND_URL || process.env.CLIENT_URL || "http://localhost:5173").replace(/\/$/, "");
+  const resetUrl = `${baseUrl}/reset-password/${resetToken}`;
 
   await sendEmail(
     user.email,
     "Reset your password",
-    `<h3>Reset your password</h3><p>Click the link below (valid 10 minutes):</p><a href="${resetLink}">${resetLink}</a>`
+    `
+    <h3>Password Reset</h3>
+    <p>Click the link below to reset your password:</p>
+    <a href="${resetUrl}">${resetUrl}</a>
+    <p>Valid for 10 minutes</p>
+    `
   );
 
   return { message: "Reset link sent to email" };
 };
 
 const resetPasswordService = async (token, password) => {
-  const user = await userRepository.findByResetToken(token);
+  const hashedToken = crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+
+  const user = await userRepository.findByResetPasswordToken(hashedToken);
   if (!user) {
-    const error = new Error("Invalid or expired reset link");
+    const error = new Error("Invalid or expired token");
     error.statusCode = 400;
     throw error;
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
   user.password = hashedPassword;
-  user.resetToken = undefined;
-  user.resetTokenExpire = undefined;
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpire = undefined;
   await user.save();
 
   return { message: "Password reset successful" };
@@ -120,7 +133,7 @@ const sendOTPService = async (email) => {
   await sendEmail(
     user.email,
     "OTP for Password Reset",
-    `<h3>Your OTP is: <strong>${otp}</strong></h3><p>Valid for 5 minutes.</p>`
+    `<h2>Your OTP is: ${otp}</h2><p>Valid for 5 minutes.</p>`
   );
 
   return { message: "OTP sent to email" };
