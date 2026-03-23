@@ -1,31 +1,5 @@
 const mongoose = require("mongoose");
 
-<<<<<<< HEAD
-const messageSchema = new mongoose.Schema(
-  {
-    senderId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-    receiverId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-    text: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-  },
-  { timestamps: true }
-);
-
-messageSchema.index({ senderId: 1, receiverId: 1, createdAt: 1 });
-
-module.exports = mongoose.model("Message", messageSchema);
-=======
 const messageSchema = new mongoose.Schema({
     conversationId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -78,4 +52,3 @@ const messageSchema = new mongoose.Schema({
 messageSchema.index({ conversationId: 1, createdAt: 1 });
 
 module.exports = mongoose.model("Message", messageSchema);
->>>>>>> 1e7ed06a06e5b054829de5c2a39cbc3fdb71fc19
