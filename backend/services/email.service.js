@@ -1,8 +1,8 @@
 const nodemailer = require("nodemailer");
 
 const sendEmail = async (to, subject, html) => {
-  const user = process.env.EMAIL_USER || process.env.SMTP_USER;
-  const pass = process.env.EMAIL_PASS || process.env.SMTP_PASS;
+  const user = (process.env.EMAIL_USER || process.env.SMTP_USER)?.trim();
+  const pass = (process.env.EMAIL_PASS || process.env.SMTP_PASS)?.replace(/\s/g, ""); // Remove spaces (Gmail App Password format)
 
   if (!user || !pass) {
     const err = new Error("Email service not configured");
@@ -40,7 +40,10 @@ const sendEmail = async (to, subject, html) => {
     console.log("✅ Email sent:", info.response);
   } catch (error) {
     console.error("❌ Email sending failed:", error.message);
-    const err = new Error("Failed to send email");
+    if (error.response) console.error("   Response:", error.response);
+    const err = new Error(
+      "Failed to send email. Verify EMAIL_USER and EMAIL_PASS (use Gmail App Password, no spaces)."
+    );
     err.statusCode = 502;
     throw err;
   }
