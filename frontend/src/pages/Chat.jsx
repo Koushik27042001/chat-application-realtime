@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import ChatHeader from "../components/ChatHeader";
@@ -7,113 +7,224 @@ import MessageInput from "../components/MessageInput";
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
 import useSocket from "../hooks/useSocket";
+import { conversationApi, messageApi, userApi } from "../services/api";
 
-const initialChats = [
-  {
-    id: "user-1",
-    name: "John Doe",
-    role: "Frontend Developer",
-    lastMessage: "Can you review the dashboard layout?",
-    messages: [
-      { id: "1", text: "Hello!", sender: "me", time: "09:30 AM" },
-      { id: "2", text: "Hi there!", sender: "them", time: "09:31 AM" },
-      {
-        id: "3",
-        text: "Can you review the dashboard layout?",
-        sender: "them",
-        time: "09:32 AM",
-      },
-    ],
-  },
-  {
-    id: "user-2",
-    name: "Sarah Lee",
-    role: "Product Designer",
-    lastMessage: "The spacing feels much better now.",
-    messages: [
-      {
-        id: "4",
-        text: "The spacing feels much better now.",
-        sender: "them",
-        time: "10:12 AM",
-      },
-    ],
-  },
-  {
-    id: "user-3",
-    name: "Alex Kim",
-    role: "Backend Engineer",
-    lastMessage: "Socket server will be ready later today.",
-    messages: [
-      {
-        id: "5",
-        text: "Socket server will be ready later today.",
-        sender: "them",
-        time: "11:05 AM",
-      },
-    ],
-  },
-];
-
-const formatTime = () =>
-  new Date().toLocaleTimeString([], {
+const formatTime = (value) =>
+  new Date(value).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   });
 
+const normalizeMessage = (message, currentUserId) => {
+  const senderId = message.sender?.toString?.() ?? message.sender;
+  return {
+    id: message._id || message.id || `message-${Date.now()}`,
+    text: message.content,
+    sender: senderId,
+    own: senderId === currentUserId,
+    time: formatTime(message.createdAt || new Date()),
+  };
+};
+
 export default function Chat() {
   const navigate = useNavigate();
-  const { logout, user } = useAuth();
-  const { isConnected } = useSocket();
+  const { logout, token, user } = useAuth();
+  const [contacts, setContacts] = useState([]);
+  const [messages, setMessages] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [chatUsers, setChatUsers] = useState(initialChats);
-  const [activeChatId, setActiveChatId] = useState(initialChats[0].id);
+  const [activeChatId, setActiveChatId] = useState(null);
+  const activeChatIdRef = useRef(null);
+  const contactsRef = useRef([]);
+
+  const handleIncomingMessage = (message) => {
+    const senderId = message.sender?.toString?.() ?? message.sender;
+
+    setContacts((current) =>
+      current.map((contact) =>
+        contact.id === senderId
+          ? {
+              ...contact,
+              conversationId: message.conversationId || contact.conversationId,
+              lastMessage: message.content,
+            }
+          : contact
+      )
+    );
+
+    if (activeChatIdRef.current === senderId) {
+      setMessages((current) => [
+        ...current,
+        normalizeMessage(message, user?.id),
+      ]);
+    }
+  };
+
+  const { socket, isConnected } = useSocket({
+    userId: user?.id,
+    onMessage: handleIncomingMessage,
+  });
+
+  useEffect(() => {
+    activeChatIdRef.current = activeChatId;
+  }, [activeChatId]);
+
+  useEffect(() => {
+    contactsRef.current = contacts;
+  }, [contacts]);
+
+  useEffect(() => {
+    const loadUsers = async () => {
+      if (!token) {
+        return;
+      }
+
+      try {
+        const { data } = await userApi.list(token);
+        const nextContacts = data.map((contact) => ({
+          id: contact.id,
+          name: contact.name,
+          email: contact.email,
+          conversationId: null,
+          lastMessage: "Tap to start a conversation.",
+        }));
+
+        setContacts(nextContacts);
+        if (!activeChatId && nextContacts.length) {
+          setActiveChatId(nextContacts[0].id);
+        }
+      } catch (error) {
+        setContacts([]);
+      }
+    };
+
+    loadUsers();
+  }, [token]);
+
+  useEffect(() => {
+    const loadMessages = async () => {
+      if (!token || !activeChatId) {
+        setMessages([]);
+        return;
+      }
+
+      const activeContact = contactsRef.current.find(
+        (contact) => contact.id === activeChatId
+      );
+
+      if (!activeContact) {
+        setMessages([]);
+        return;
+      }
+
+      try {
+        let conversationId = activeContact.conversationId;
+
+        if (!conversationId) {
+          const { data: conversationData } = await conversationApi.withUser(
+            token,
+            activeContact.id
+          );
+          conversationId = conversationData.conversationId || null;
+
+          setContacts((current) =>
+            current.map((contact) =>
+              contact.id === activeContact.id
+                ? { ...contact, conversationId }
+                : contact
+            )
+          );
+        }
+
+        if (!conversationId) {
+          setMessages([]);
+          return;
+        }
+
+        const { data } = await messageApi.list(token, conversationId, 0, 20);
+        const normalized = data.map((message) =>
+          normalizeMessage(message, user?.id)
+        );
+
+        setMessages(normalized);
+
+        const lastMessage = normalized[normalized.length - 1];
+        if (lastMessage) {
+          setContacts((current) =>
+            current.map((contact) =>
+              contact.id === activeChatId
+                ? { ...contact, lastMessage: lastMessage.text }
+                : contact
+            )
+          );
+        }
+      } catch (error) {
+        setMessages([]);
+      }
+    };
+
+    loadMessages();
+  }, [token, activeChatId, user?.id]);
 
   const filteredUsers = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
     if (!query) {
-      return chatUsers;
+      return contacts;
     }
 
-    return chatUsers.filter((contact) =>
-      `${contact.name} ${contact.role} ${contact.lastMessage}`
+    return contacts.filter((contact) =>
+      `${contact.name} ${contact.email || ""} ${contact.id} ${contact.lastMessage}`
         .toLowerCase()
         .includes(query)
     );
-  }, [chatUsers, searchTerm]);
+  }, [contacts, searchTerm]);
 
   const activeContact =
     filteredUsers.find((contact) => contact.id === activeChatId) ||
-    chatUsers.find((contact) => contact.id === activeChatId) ||
+    contacts.find((contact) => contact.id === activeChatId) ||
     filteredUsers[0] ||
-    chatUsers[0];
+    contacts[0];
 
   const handleSelectContact = (contact) => {
     setActiveChatId(contact.id);
   };
 
-  const handleSend = (text) => {
-    setChatUsers((current) =>
-      current.map((contact) => {
-        if (contact.id !== activeChatId) {
-          return contact;
-        }
+  const handleSend = async (text) => {
+    if (!token || !activeContact) {
+      return;
+    }
 
-        const nextMessage = {
-          id: `message-${Date.now()}`,
-          text,
-          sender: "me",
-          time: formatTime(),
-        };
+    try {
+      const { data } = await messageApi.send(token, {
+        receiverId: activeContact.id,
+        content: text,
+      });
 
-        return {
-          ...contact,
-          lastMessage: text,
-          messages: [...contact.messages, nextMessage],
-        };
-      })
-    );
+      const normalized = normalizeMessage(data.message, user?.id);
+      setMessages((current) => [...current, normalized]);
+
+      setContacts((current) =>
+        current.map((contact) =>
+          contact.id === activeContact.id
+            ? {
+                ...contact,
+                lastMessage: normalized.text,
+                conversationId:
+                  data.conversation?._id || contact.conversationId,
+              }
+            : contact
+        )
+      );
+
+      if (socket) {
+        socket.emit("private-message", {
+          receiverId: activeContact.id,
+          message: data.message,
+        });
+      }
+    } catch (error) {
+      // Silent fail for now; could add toast/alert.
+    }
   };
 
   const handleLogout = () => {
@@ -133,21 +244,21 @@ export default function Chat() {
           onSearchChange={setSearchTerm}
         />
 
-        <div className="flex flex-1 flex-col bg-gray-100">
-          <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-3">
+        <div className="flex flex-col flex-1 bg-gray-100">
+          <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-slate-200">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-coral">
                 Dashboard
               </p>
               <p className="mt-1 text-sm text-slate-500">
-                Mock authentication is active for UI testing.
+                Signed in as {user?.name || "Chat member"}.
               </p>
             </div>
 
             <button
               type="button"
               onClick={handleLogout}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-coral hover:text-coral"
+              className="px-4 py-2 text-sm font-semibold transition border rounded-xl border-slate-200 text-slate-700 hover:border-coral hover:text-coral"
             >
               Logout
             </button>
@@ -157,11 +268,11 @@ export default function Chat() {
             <>
               <ChatHeader activeContact={activeContact} isConnected={isConnected} />
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                {activeContact.messages.map((message) => (
+              <div className="flex-1 p-4 space-y-2 overflow-y-auto">
+                {messages.map((message) => (
                   <MessageBubble
                     key={message.id}
-                    own={message.sender === "me"}
+                    own={message.own}
                     message={message}
                   />
                 ))}
@@ -170,7 +281,7 @@ export default function Chat() {
               <MessageInput onSend={handleSend} />
             </>
           ) : (
-            <div className="flex flex-1 items-center justify-center p-6 text-slate-500">
+            <div className="flex items-center justify-center flex-1 p-6 text-slate-500">
               Select a user from the sidebar to start chatting.
             </div>
           )}

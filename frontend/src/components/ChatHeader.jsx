@@ -11,12 +11,12 @@ const ChatHeader = ({ activeContact, isConnected }) => {
         </div>
         <div>
           <h2 className="text-lg font-semibold text-slate-800">{activeContact.name}</h2>
-          <p className="text-sm text-slate-500">{activeContact.role}</p>
+          <p className="text-sm text-slate-500">{activeContact.email || "Chat member"}</p>
         </div>
       </div>
 
       <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-        {isConnected ? "Socket Live" : "Mock Mode"}
+        {isConnected ? "Socket Live" : "Socket Offline"}
       </div>
     </div>
   );
