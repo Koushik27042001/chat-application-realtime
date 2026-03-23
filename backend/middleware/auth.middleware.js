@@ -1,11 +1,11 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/User");
+const userRepository = require("../repositories/user.repository");
 
 const auth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
-    return res.status(401).json({ message: "No token" });
+    return res.status(401).json({ status: "error", message: "No token" });
   }
 
   const token = authHeader.startsWith("Bearer ")
@@ -14,10 +14,10 @@ const auth = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id || decoded.userId).select("-password");
+    const user = await userRepository.findById(decoded.id || decoded.userId);
 
     if (!user) {
-      return res.status(401).json({ message: "User not found" });
+      return res.status(401).json({ status: "error", message: "User not found" });
     }
 
     req.user = {
@@ -28,7 +28,7 @@ const auth = async (req, res, next) => {
 
     next();
   } catch (error) {
-    return res.status(401).json({ message: "Invalid token" });
+    return res.status(401).json({ status: "error", message: "Invalid token" });
   }
 };
 

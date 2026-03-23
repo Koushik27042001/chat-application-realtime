@@ -98,8 +98,11 @@ const Login = () => {
             </button>
           </form>
 
-          <p className="mt-6 text-sm text-slate-500">
+          <p className="mt-6 space-y-1 text-sm text-slate-500">
             New here? <Link className="font-semibold text-teal" to="/register">Create an account</Link>
+            <span className="block">
+              <Link className="font-semibold text-teal" to="/forgot-password">Forgot password?</Link>
+            </span>
           </p>
         </div>
       </section>

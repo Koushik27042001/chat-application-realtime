@@ -13,12 +13,25 @@ export const apiClient = axios.create({
   baseURL: API_BASE_URL,
 });
 
+// Unwrap enterprise ApiResponse format: { status, statusCode, message, data }
+apiClient.interceptors.response.use((res) => {
+  if (res?.data?.data !== undefined && res?.data?.status) {
+    res.data = res.data.data;
+  }
+  return res;
+});
+
 export const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 
 export const authApi = {
   register: (payload) => apiClient.post("/auth/register", payload),
   login: (payload) => apiClient.post("/auth/login", payload),
   me: (token) => apiClient.get("/auth/me", createAuthConfig(token)),
+  forgotPassword: (email) => apiClient.post("/auth/forgot-password", { email }),
+  resetPassword: (token, password) =>
+    apiClient.post(`/auth/reset-password/${token}`, { password }),
+  sendOTP: (email) => apiClient.post("/auth/send-otp", { email }),
+  verifyOTP: (payload) => apiClient.post("/auth/verify-otp", payload),
 };
 
 export const messageApi = {
