@@ -36,27 +36,27 @@ const Login = () => {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-10">
+    <main className="flex items-center justify-center min-h-screen px-4 py-10">
       <section className="grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-white/60 bg-white/85 shadow-panel backdrop-blur lg:grid-cols-[1.05fr_0.95fr]">
-        <div className="hidden bg-ink px-10 py-12 text-white lg:block">
+        <div className="hidden px-10 py-12 text-white bg-ink lg:block">
           <p className="text-sm uppercase tracking-[0.3em] text-coral">Mock auth enabled</p>
-          <h1 className="mt-5 font-display text-5xl font-semibold leading-tight">
+          <h1 className="mt-5 text-5xl font-semibold leading-tight font-display">
             Sign in and jump straight into the chat dashboard.
           </h1>
-          <p className="mt-6 max-w-md text-sm text-slate-200">
+          <p className="max-w-md mt-6 text-sm text-slate-200">
             This version uses frontend-only authentication so you can keep building the UI flow without waiting on backend auth endpoints.
           </p>
         </div>
 
         <div className="px-6 py-10 sm:px-10">
-          <h2 className="font-display text-3xl font-semibold text-ink">Login</h2>
+          <h2 className="text-3xl font-semibold font-display text-ink">Login</h2>
           <p className="mt-2 text-sm text-slate-500">
             Use the prefilled demo credentials or enter anything valid.
           </p>
 
           <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
             <input
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-coral focus:bg-white"
+              className="w-full px-4 py-3 transition border outline-none rounded-2xl border-slate-200 bg-slate-50 focus:border-coral focus:bg-white"
               type="email"
               name="email"
               placeholder="Email"
@@ -64,7 +64,7 @@ const Login = () => {
               onChange={handleChange}
             />
             <input
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none transition focus:border-coral focus:bg-white"
+              className="w-full px-4 py-3 transition border outline-none rounded-2xl border-slate-200 bg-slate-50 focus:border-coral focus:bg-white"
               type="password"
               name="password"
               placeholder="Password"
@@ -97,3 +97,7 @@ const Login = () => {
 };
 
 export default Login;
+
+
+
+
