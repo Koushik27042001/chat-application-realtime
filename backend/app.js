@@ -27,6 +27,16 @@ app.use(
 
 app.use(express.json());
 
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    if (res.statusCode >= 500) {
+      console.error(`[${res.statusCode}] ${req.method} ${req.originalUrl}`);
+    }
+  });
+  next();
+});
+
 app.get("/", (req, res) => {
   res.send("Backend is running");
 });
