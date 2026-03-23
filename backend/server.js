@@ -14,9 +14,15 @@ dotenv.config();
 
 const app = express();
 
-// ✅ Allowed origin (Vercel frontend)
+// ✅ Validate ENV
+if (!process.env.JWT_SECRET) {
+    console.error("❌ JWT_SECRET missing");
+    process.exit(1);
+}
+
 const allowedOrigin =
-    process.env.CLIENT_URL || "https://chat-application-realtime-ruddy.vercel.app";
+    process.env.CLIENT_URL ||
+    "https://chat-application-realtime-ruddy.vercel.app";
 
 // ✅ Middleware
 app.use(
@@ -28,24 +34,22 @@ app.use(
 
 app.use(express.json());
 
-// ✅ Health & root route
+// ✅ Routes
 app.get("/", (req, res) => {
     res.send("Backend is running 🚀");
 });
 
 app.get("/api/health", (req, res) => {
-    res.status(200).json({ status: "ok" });
+    res.json({ status: "ok" });
 });
 
-// ✅ Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/users", userRoutes);
 
-// ✅ Create server
+// ✅ Server + Socket
 const server = http.createServer(app);
 
-// ✅ Socket.io setup (IMPORTANT)
 const io = new Server(server, {
     cors: {
         origin: allowedOrigin,
@@ -55,22 +59,23 @@ const io = new Server(server, {
     transports: ["websocket", "polling"],
 });
 
-// ✅ Initialize socket
 initializeSocket(io);
 
-// ✅ PORT
+// ✅ Start server safely
 const PORT = process.env.PORT || 5000;
 
-// ✅ Start server
 const startServer = async() => {
     try {
+        console.log("🔄 Connecting to MongoDB...");
+
         await connectDB();
 
         server.listen(PORT, "0.0.0.0", () => {
             console.log(`🚀 Server running on port ${PORT}`);
         });
+
     } catch (error) {
-        console.error("❌ Server start failed:", error.message);
+        console.error("❌ Server failed:", error.message);
         process.exit(1);
     }
 };
