@@ -7,7 +7,7 @@ import MessageInput from "../components/MessageInput";
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
 import useSocket from "../hooks/useSocket";
-import { messageApi, userApi } from "../services/api";
+import { conversationApi, messageApi, userApi } from "../services/api";
 
 const formatTime = (value) =>
   new Date(value).toLocaleTimeString([], {
@@ -34,6 +34,7 @@ export default function Chat() {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeChatId, setActiveChatId] = useState(null);
   const activeChatIdRef = useRef(null);
+  const contactsRef = useRef([]);
 
   const handleIncomingMessage = (message) => {
     const senderId = message.sender?.toString?.() ?? message.sender;
@@ -43,6 +44,7 @@ export default function Chat() {
         contact.id === senderId
           ? {
               ...contact,
+              conversationId: message.conversationId || contact.conversationId,
               lastMessage: message.content,
             }
           : contact
@@ -67,6 +69,10 @@ export default function Chat() {
   }, [activeChatId]);
 
   useEffect(() => {
+    contactsRef.current = contacts;
+  }, [contacts]);
+
+  useEffect(() => {
     const loadUsers = async () => {
       if (!token) {
         return;
@@ -78,6 +84,7 @@ export default function Chat() {
           id: contact.id,
           name: contact.name,
           email: contact.email,
+          conversationId: null,
           lastMessage: "Tap to start a conversation.",
         }));
 
@@ -100,8 +107,40 @@ export default function Chat() {
         return;
       }
 
+      const activeContact = contactsRef.current.find(
+        (contact) => contact.id === activeChatId
+      );
+
+      if (!activeContact) {
+        setMessages([]);
+        return;
+      }
+
       try {
-        const { data } = await messageApi.list(token, activeChatId);
+        let conversationId = activeContact.conversationId;
+
+        if (!conversationId) {
+          const { data: conversationData } = await conversationApi.withUser(
+            token,
+            activeContact.id
+          );
+          conversationId = conversationData.conversationId || null;
+
+          setContacts((current) =>
+            current.map((contact) =>
+              contact.id === activeContact.id
+                ? { ...contact, conversationId }
+                : contact
+            )
+          );
+        }
+
+        if (!conversationId) {
+          setMessages([]);
+          return;
+        }
+
+        const { data } = await messageApi.list(token, conversationId, 0, 20);
         const normalized = data.map((message) =>
           normalizeMessage(message, user?.id)
         );
@@ -167,7 +206,12 @@ export default function Chat() {
       setContacts((current) =>
         current.map((contact) =>
           contact.id === activeContact.id
-            ? { ...contact, lastMessage: normalized.text }
+            ? {
+                ...contact,
+                lastMessage: normalized.text,
+                conversationId:
+                  data.conversation?._id || contact.conversationId,
+              }
             : contact
         )
       );

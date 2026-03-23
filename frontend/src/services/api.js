@@ -22,10 +22,18 @@ export const authApi = {
 };
 
 export const messageApi = {
-  list: (token, userId) =>
-    apiClient.get(`/messages?userId=${userId}`, createAuthConfig(token)),
+  list: (token, conversationId, page = 0, limit = 20) =>
+    apiClient.get(
+      `/messages?conversationId=${conversationId}&page=${page}&limit=${limit}`,
+      createAuthConfig(token)
+    ),
   send: (token, payload) =>
     apiClient.post("/messages", payload, createAuthConfig(token)),
+};
+
+export const conversationApi = {
+  withUser: (token, userId) =>
+    apiClient.get(`/conversations/with/${userId}`, createAuthConfig(token)),
 };
 
 export const userApi = {
