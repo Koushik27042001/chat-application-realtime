@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const userRepository = require("../repositories/user.repository");
 const sendEmail = require("./email.service");
+const { verifyIdToken } = require("../firebaseAdmin");
 const { createDefaultAvatar } = require("../utils/avatar");
 
 const createToken = (id) =>
@@ -48,6 +49,12 @@ const loginService = async (email, password) => {
     throw error;
   }
 
+  if (!user.password) {
+    const error = new Error("This account uses Google sign-in");
+    error.statusCode = 400;
+    throw error;
+  }
+
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) {
     const error = new Error("Invalid credentials");
@@ -58,6 +65,72 @@ const loginService = async (email, password) => {
   return {
     token: createToken(user._id),
     user: sanitizeUser(user),
+  };
+};
+
+const googleLoginService = async (idToken) => {
+  let decoded;
+  try {
+    decoded = await verifyIdToken(idToken);
+  } catch (e) {
+    if (e.statusCode === 503) {
+      throw e;
+    }
+    const err = new Error("Google sign-in failed. Try again.");
+    err.statusCode = 401;
+    throw err;
+  }
+  const uid = decoded.uid;
+  const email = (decoded.email || "").toLowerCase().trim();
+
+  if (!email || !decoded.email_verified) {
+    const error = new Error("Google account email is not verified");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const name =
+    (decoded.name && String(decoded.name).trim()) ||
+    email.split("@")[0] ||
+    "User";
+  const picture = typeof decoded.picture === "string" ? decoded.picture : "";
+
+  let user = await userRepository.findByFirebaseUid(uid);
+  if (user) {
+    return {
+      token: createToken(user._id),
+      user: sanitizeUser(user),
+    };
+  }
+
+  user = await userRepository.findByEmail(email);
+  if (user) {
+    if (user.firebaseUid && user.firebaseUid !== uid) {
+      const error = new Error("This email is linked to a different Google account");
+      error.statusCode = 409;
+      throw error;
+    }
+    user.firebaseUid = uid;
+    if (picture && (!user.avatar || user.avatar.includes("dicebear"))) {
+      user.avatar = picture;
+    }
+    await user.save();
+    return {
+      token: createToken(user._id),
+      user: sanitizeUser(user),
+    };
+  }
+
+  const newUser = await userRepository.create({
+    name,
+    email,
+    firebaseUid: uid,
+    avatar: picture || createDefaultAvatar(name),
+  });
+
+  return {
+    token: createToken(newUser._id),
+    user: sanitizeUser(newUser),
   };
 };
 
@@ -162,6 +235,7 @@ const verifyOTPAndResetService = async (email, otp, password) => {
 module.exports = {
   registerService,
   loginService,
+  googleLoginService,
   forgotPasswordService,
   resetPasswordService,
   sendOTPService,

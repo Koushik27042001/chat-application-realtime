@@ -26,6 +26,7 @@ export const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 export const authApi = {
   register: (payload) => apiClient.post("/auth/register", payload),
   login: (payload) => apiClient.post("/auth/login", payload),
+  loginWithGoogle: (payload) => apiClient.post("/auth/google", payload),
   me: (token) => apiClient.get("/auth/me", createAuthConfig(token)),
   forgotPassword: (email) => apiClient.post("/auth/forgot-password", { email }),
   resetPassword: (token, password) =>

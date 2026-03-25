@@ -39,4 +39,14 @@ const initFirebaseAdmin = () => {
   return null;
 };
 
-module.exports = { admin, initFirebaseAdmin };
+const verifyIdToken = async (idToken) => {
+  initFirebaseAdmin();
+  if (!admin.apps?.length) {
+    const err = new Error("Google sign-in is not configured on the server");
+    err.statusCode = 503;
+    throw err;
+  }
+  return admin.auth().verifyIdToken(idToken);
+};
+
+module.exports = { admin, initFirebaseAdmin, verifyIdToken };

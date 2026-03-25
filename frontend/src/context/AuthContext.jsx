@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
 import { authApi } from "../services/api";
+import { getGoogleIdToken } from "../services/googleAuth";
 
 const AuthContext = createContext(null);
 const STORAGE_KEY = "chat-app-auth-v2";
@@ -106,6 +107,18 @@ export const AuthProvider = ({ children }) => {
     return nextAuth;
   };
 
+  const loginWithGoogle = async () => {
+    const idToken = await getGoogleIdToken();
+    const { data } = await authApi.loginWithGoogle({ idToken });
+    const nextAuth = {
+      token: data.token,
+      user: data.user,
+    };
+
+    saveAuth(nextAuth);
+    return nextAuth;
+  };
+
   const logout = () => {
     setUser(null);
     setToken("");
@@ -121,6 +134,7 @@ export const AuthProvider = ({ children }) => {
         saveAuth,
         login,
         register,
+        loginWithGoogle,
         logout,
       }}
     >

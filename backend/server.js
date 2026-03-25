@@ -25,7 +25,43 @@ const io = new Server(server, {
 
 initializeSocket(io);
 
-const PORT = process.env.PORT || 5000;
+const PORT = Number(process.env.PORT) || 5000;
+const MAX_PORT_RETRIES = 10;
+
+const listenOnPort = (preferredPort) =>
+  new Promise((resolve, reject) => {
+    let attempts = 0;
+    let activePort = preferredPort;
+
+    const tryListen = () => {
+      const onError = (error) => {
+        server.off("listening", onListening);
+
+        if (error.code === "EADDRINUSE" && attempts < MAX_PORT_RETRIES) {
+          attempts += 1;
+          activePort += 1;
+          console.warn(
+            `Port ${activePort - 1} is already in use. Retrying on port ${activePort}...`
+          );
+          setImmediate(tryListen);
+          return;
+        }
+
+        reject(error);
+      };
+
+      const onListening = () => {
+        server.off("error", onError);
+        resolve(activePort);
+      };
+
+      server.once("error", onError);
+      server.once("listening", onListening);
+      server.listen(activePort, "0.0.0.0");
+    };
+
+    tryListen();
+  });
 
 const startServer = async () => {
   try {
@@ -33,9 +69,8 @@ const startServer = async () => {
     console.log("Connecting to MongoDB...");
     await connectDB();
 
-    server.listen(PORT, "0.0.0.0", () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-    });
+    const activePort = await listenOnPort(PORT);
+    console.log(`Server running on port ${activePort}`);
   } catch (error) {
     console.error("Server failed:", error.message);
     process.exit(1);

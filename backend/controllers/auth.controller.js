@@ -3,6 +3,7 @@ const ApiResponse = require("../utils/apiResponse");
 const {
   registerService,
   loginService,
+  googleLoginService,
   forgotPasswordService,
   resetPasswordService,
   sendOTPService,
@@ -31,6 +32,20 @@ const login = asyncHandler(async (req, res) => {
   }
 
   const result = await loginService(email, password);
+
+  res.status(200).json(
+    new ApiResponse(200, "Login successful", result)
+  );
+});
+
+const googleLogin = asyncHandler(async (req, res) => {
+  const { idToken } = req.body;
+
+  if (!idToken || typeof idToken !== "string") {
+    return res.status(400).json(new ApiResponse(400, "idToken is required"));
+  }
+
+  const result = await googleLoginService(idToken);
 
   res.status(200).json(
     new ApiResponse(200, "Login successful", result)
@@ -89,6 +104,7 @@ const verifyOTPAndReset = asyncHandler(async (req, res) => {
 module.exports = {
   register,
   login,
+  googleLogin,
   getCurrentUser,
   forgotPassword,
   resetPassword,

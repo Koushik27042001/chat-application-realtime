@@ -2,6 +2,8 @@ const User = require("../models/User");
 
 const findByEmail = (email) => User.findOne({ email: email.toLowerCase() });
 
+const findByFirebaseUid = (firebaseUid) => User.findOne({ firebaseUid });
+
 const findById = (id, projection = "-password") =>
   User.findById(id).select(projection).lean();
 
@@ -30,6 +32,7 @@ const updateById = (id, update) =>
 
 module.exports = {
   findByEmail,
+  findByFirebaseUid,
   findById,
   create,
   findMany,
