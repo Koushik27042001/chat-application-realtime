@@ -2,15 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-/* ─── Floating Orb ────────────────────────────────────────────── */
-const Orb = ({ style, className }) => (
-  <div
-    className={`pointer-events-none absolute rounded-full blur-3xl opacity-30 ${className}`}
-    style={style}
-  />
-);
-
-/* ─── Animated Input ──────────────────────────────────────────── */
+/* Animated Input */
 const FloatingInput = ({ label, type, name, value, onChange, children }) => {
   const [focused, setFocused] = useState(false);
   const active = focused || value.length > 0;
@@ -66,7 +58,7 @@ const FloatingInput = ({ label, type, name, value, onChange, children }) => {
   );
 };
 
-/* ─── Main Component ──────────────────────────────────────────── */
+/* Main Component */
 const Login = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -101,7 +93,7 @@ const Login = () => {
 
   return (
     <>
-      {/* ── Global styles injected via <style> ── */}
+      {/* Global styles injected via <style> */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
 
@@ -278,12 +270,13 @@ const Login = () => {
           color: #cbd5e1;
         }
         .feature-icon {
-          width: 28px; height: 28px;
+          width: 48px; height: 28px;
           border-radius: 0.5rem;
           background: rgba(167,139,250,0.15);
           border: 1px solid rgba(167,139,250,0.2);
           display: flex; align-items: center; justify-content: center;
-          font-size: 0.8rem;
+          font-size: 0.7rem;
+          letter-spacing: 0.08em;
           flex-shrink: 0;
         }
 
@@ -500,8 +493,7 @@ const Login = () => {
         <div className="orb-3" style={{ position: "absolute", borderRadius: "50%", filter: "blur(60px)", opacity: 0.18, width: 200, height: 200, top: "45%", right: "10%", background: "radial-gradient(circle, #f472b6 0%, transparent 70%)", animation: "drift3 11s ease-in-out infinite" }} />
 
         <div className={`card ${mounted ? "show" : ""}`}>
-
-          {/* ── Left Panel ── */}
+          {/* Left Panel */}
           <div className="panel-left">
             {/* decorative rings */}
             <div className="deco-circle" style={{ width: 300, height: 300, bottom: -100, right: -80, opacity: 0.15 }} />
@@ -516,16 +508,16 @@ const Login = () => {
                 Your ideas,<br /><span>amplified</span><br />by AI.
               </h1>
               <p className="panel-sub">
-                Sign in to your workspace and pick up exactly where you left off — conversations, history, everything intact.
+                Sign in to your workspace and pick up exactly where you left off - conversations, history, everything intact.
               </p>
             </div>
 
             <div>
               <div className="feature-list">
                 {[
-                  { icon: "🔒", text: "End-to-end encrypted sessions" },
-                  { icon: "⚡", text: "Instant response, zero lag" },
-                  { icon: "💾", text: "Full conversation history saved" },
+                  { icon: "LOCK", text: "End-to-end encrypted sessions" },
+                  { icon: "FAST", text: "Instant response, zero lag" },
+                  { icon: "SAVE", text: "Full conversation history saved" },
                 ].map((f, i) => (
                   <div className="feature-item" key={i}>
                     <div className="feature-icon">{f.icon}</div>
@@ -536,10 +528,10 @@ const Login = () => {
             </div>
           </div>
 
-          {/* ── Right Panel ── */}
+          {/* Right Panel */}
           <div className="panel-right">
             <div className={`reveal d1 ${mounted ? "show" : ""}`}>
-              <p className="form-title">Welcome back 👋</p>
+              <p className="form-title">Welcome back</p>
               <p className="form-sub">Sign in to continue to your dashboard</p>
             </div>
 
@@ -547,10 +539,10 @@ const Login = () => {
             <div className={`reveal d2 ${mounted ? "show" : ""}`} style={{ marginTop: "1.75rem" }}>
               <button className="social-btn" type="button">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                 </svg>
                 Continue with Google
               </button>
@@ -573,14 +565,14 @@ const Login = () => {
                     >
                       {showPassword ? (
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/>
-                          <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/>
-                          <line x1="1" y1="1" x2="23" y2="23"/>
+                          <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" />
+                          <path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" />
+                          <line x1="1" y1="1" x2="23" y2="23" />
                         </svg>
                       ) : (
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                          <circle cx="12" cy="12" r="3"/>
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
                         </svg>
                       )}
                     </button>
@@ -591,7 +583,11 @@ const Login = () => {
 
               {error && (
                 <div className="error-box" style={{ marginTop: "1rem" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
                   {error}
                 </div>
               )}
@@ -601,8 +597,11 @@ const Login = () => {
                   <div className="shimmer" />
                   <span>
                     {isSubmitting ? (
-                      <><span className="spinner" />Signing you in…</>
-                    ) : "Enter Dashboard →"}
+                      <>
+                        <span className="spinner" />
+                        Signing you in...
+                      </>
+                    ) : "Enter Dashboard"}
                   </span>
                 </button>
               </div>

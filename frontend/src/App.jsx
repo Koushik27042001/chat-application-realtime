@@ -2,8 +2,11 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import Loader from "./components/Loader";
 import Chat from "./pages/Chat";
+import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
+import OtpReset from "./pages/OtpReset";
 import Register from "./pages/Register";
+import ResetPassword from "./pages/ResetPassword";
 import { useAuth } from "./context/AuthContext";
 
 const ProtectedRoute = ({ children }) => {
@@ -54,6 +57,9 @@ const App = () => {
           </PublicRoute>
         }
       />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password/:token" element={<ResetPassword />} />
+      <Route path="/otp-reset" element={<OtpReset />} />
       <Route
         path="/chat"
         element={
