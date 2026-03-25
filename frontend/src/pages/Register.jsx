@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import bgImage from "../assets/bg_pic.jpg";
 
 /* ─── Animated Floating Input ─────────────────────────────────── */
 const FloatingInput = ({ label, type, name, value, onChange, children }) => {
@@ -163,7 +164,7 @@ const Register = () => {
           position: relative; overflow: hidden;
           background:
             linear-gradient(180deg, rgba(8,11,20,0.7), rgba(8,11,20,0.85)),
-            url("/src/assets/bg_pic.jpg");
+            url("${bgImage}");
           background-size: cover;
           background-position: center;
           background-attachment: fixed;
@@ -274,7 +275,7 @@ const Register = () => {
           border-radius: 1.2rem;
           background:
             linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.35)),
-            url("/src/assets/bg_pic.jpg");
+            url("${bgImage}");
           background-size: cover;
           background-position: center;
           border: 1px solid rgba(255,255,255,0.12);
@@ -633,6 +634,7 @@ const Register = () => {
 };
 
 export default Register;
+
 
 
 

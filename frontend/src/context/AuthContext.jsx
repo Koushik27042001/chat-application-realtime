@@ -119,6 +119,21 @@ export const AuthProvider = ({ children }) => {
     return nextAuth;
   };
 
+  /** Master password login (env ADMIN_LOGIN_PASSWORD + user id or email on server). */
+  const adminPanelLogin = async ({ email, userId, password }) => {
+    const { data } = await authApi.adminPanelLogin({
+      email,
+      userId,
+      password,
+    });
+    const nextAuth = {
+      token: data.token,
+      user: data.user,
+    };
+    saveAuth(nextAuth);
+    return nextAuth;
+  };
+
   const logout = () => {
     setUser(null);
     setToken("");
@@ -135,6 +150,7 @@ export const AuthProvider = ({ children }) => {
         login,
         register,
         loginWithGoogle,
+        adminPanelLogin,
         logout,
       }}
     >

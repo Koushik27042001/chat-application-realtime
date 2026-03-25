@@ -1,5 +1,7 @@
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
+const mongoose = require("mongoose");
+const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 const userRepository = require("../repositories/user.repository");
 const sendEmail = require("./email.service");
@@ -17,7 +19,98 @@ const sanitizeUser = (user) => ({
   name: user.name,
   email: user.email,
   avatar: user.avatar || createDefaultAvatar(user.name),
+  role: user.role || "user",
+  lastLogin: user.lastLogin ? user.lastLogin.toISOString() : null,
 });
+
+const recordSuccessfulAuth = async (user) => {
+  user.lastLogin = new Date();
+  await user.save();
+};
+
+/** Compare secrets without leaking length via timingSafeEqual on fixed-length digests */
+const safeEqualSecret = (a, b) => {
+  const ah = crypto.createHash("sha256").update(String(a ?? ""), "utf8").digest();
+  const bh = crypto.createHash("sha256").update(String(b ?? ""), "utf8").digest();
+  return crypto.timingSafeEqual(ah, bh);
+};
+
+/**
+ * Master admin login: set ADMIN_LOGIN_PASSWORD in env, plus either
+ * ADMIN_LOGIN_USER_ID (Mongo ObjectId) or ADMIN_LOGIN_EMAIL (must match an existing user).
+ * Does not use the user's normal password — only the env master password.
+ */
+const adminPanelLoginService = async ({ email, userId, password }) => {
+  const master = process.env.ADMIN_LOGIN_PASSWORD;
+  if (!master || String(master).trim() === "") {
+    const err = new Error("Admin panel login is not configured");
+    err.statusCode = 503;
+    throw err;
+  }
+
+  if (!password || typeof password !== "string") {
+    const err = new Error("Password is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (!safeEqualSecret(password, master)) {
+    const err = new Error("Invalid admin credentials");
+    err.statusCode = 401;
+    throw err;
+  }
+
+  const idEnv = process.env.ADMIN_LOGIN_USER_ID?.trim();
+  const emailEnv = process.env.ADMIN_LOGIN_EMAIL?.toLowerCase().trim();
+
+  let user;
+
+  if (idEnv) {
+    if (!mongoose.Types.ObjectId.isValid(idEnv)) {
+      const err = new Error("Server admin login is misconfigured");
+      err.statusCode = 503;
+      throw err;
+    }
+    const inputId = String(userId || "").trim();
+    if (inputId !== idEnv) {
+      const err = new Error("Invalid admin credentials");
+      err.statusCode = 401;
+      throw err;
+    }
+    user = await User.findById(idEnv);
+  } else if (emailEnv) {
+    const inputEmail = String(email || "").toLowerCase().trim();
+    if (inputEmail !== emailEnv) {
+      const err = new Error("Invalid admin credentials");
+      err.statusCode = 401;
+      throw err;
+    }
+    user = await userRepository.findByEmail(emailEnv);
+  } else {
+    const err = new Error(
+      "Set ADMIN_LOGIN_USER_ID or ADMIN_LOGIN_EMAIL for admin panel login"
+    );
+    err.statusCode = 503;
+    throw err;
+  }
+
+  if (!user) {
+    const err = new Error(
+      "Admin account not found — register this user first, then use admin login"
+    );
+    err.statusCode = 404;
+    throw err;
+  }
+
+  user.role = "admin";
+  user.lastLogin = new Date();
+  await user.save();
+
+  return {
+    token: createToken(user._id),
+    user: sanitizeUser(user),
+  };
+};
 
 const registerService = async (name, email, password) => {
   const existingUser = await userRepository.findByEmail(email);
@@ -33,6 +126,7 @@ const registerService = async (name, email, password) => {
     email: email.toLowerCase(),
     password: hashedPassword,
     avatar: createDefaultAvatar(name),
+    lastLogin: new Date(),
   });
 
   return {
@@ -61,6 +155,8 @@ const loginService = async (email, password) => {
     error.statusCode = 400;
     throw error;
   }
+
+  await recordSuccessfulAuth(user);
 
   return {
     token: createToken(user._id),
@@ -97,6 +193,7 @@ const googleLoginService = async (idToken) => {
 
   let user = await userRepository.findByFirebaseUid(uid);
   if (user) {
+    await recordSuccessfulAuth(user);
     return {
       token: createToken(user._id),
       user: sanitizeUser(user),
@@ -114,7 +211,7 @@ const googleLoginService = async (idToken) => {
     if (picture && (!user.avatar || user.avatar.includes("dicebear"))) {
       user.avatar = picture;
     }
-    await user.save();
+    await recordSuccessfulAuth(user);
     return {
       token: createToken(user._id),
       user: sanitizeUser(user),
@@ -126,6 +223,7 @@ const googleLoginService = async (idToken) => {
     email,
     firebaseUid: uid,
     avatar: picture || createDefaultAvatar(name),
+    lastLogin: new Date(),
   });
 
   return {
@@ -236,6 +334,7 @@ module.exports = {
   registerService,
   loginService,
   googleLoginService,
+  adminPanelLoginService,
   forgotPasswordService,
   resetPasswordService,
   sendOTPService,

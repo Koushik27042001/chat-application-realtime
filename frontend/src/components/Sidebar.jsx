@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 const Sidebar = ({
   contacts,
   activeContactId,
@@ -16,6 +18,14 @@ const Sidebar = ({
         <p className="mt-1 text-xs text-slate-400">
           Your user id: {currentUser?.id || "N/A"}
         </p>
+        {currentUser?.role === "admin" ? (
+          <Link
+            to="/admin"
+            className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-slate-800"
+          >
+            Admin dashboard
+          </Link>
+        ) : null}
       </div>
 
       <div className="p-4">

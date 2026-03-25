@@ -33,6 +33,17 @@ const userSchema = new mongoose.Schema({
         default: "",
     },
 
+    role: {
+        type: String,
+        enum: ["user", "admin"],
+        default: "user",
+        index: true,
+    },
+    lastLogin: {
+        type: Date,
+        default: null,
+    },
+
     // 🔥 NEW (important for chat apps)
     isOnline: {
         type: Boolean,

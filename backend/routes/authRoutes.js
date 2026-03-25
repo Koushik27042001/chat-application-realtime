@@ -4,6 +4,7 @@ const {
   getCurrentUser,
   login,
   googleLogin,
+  adminPanelLogin,
   register,
   forgotPassword,
   resetPassword,
@@ -17,6 +18,7 @@ const router = express.Router();
 router.post("/register", register);
 router.post("/login", login);
 router.post("/google", googleLogin);
+router.post("/admin-login", adminPanelLogin);
 router.get("/me", auth, getCurrentUser);
 
 router.post("/forgot-password", forgotPassword);

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import Loader from "./components/Loader";
+import AdminDashboard from "./pages/AdminDashboard";
 import Chat from "./pages/Chat";
 import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
@@ -37,6 +38,24 @@ const PublicRoute = ({ children }) => {
   return children;
 };
 
+const AdminRoute = ({ children }) => {
+  const { isHydrated, token, user } = useAuth();
+
+  if (!isHydrated) {
+    return <Loader label="Verifying access..." fullScreen />;
+  }
+
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user?.role !== "admin") {
+    return <Navigate to="/chat" replace />;
+  }
+
+  return children;
+};
+
 const App = () => {
   return (
     <Routes>
@@ -66,6 +85,14 @@ const App = () => {
           <ProtectedRoute>
             <Chat />
           </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin"
+        element={
+          <AdminRoute>
+            <AdminDashboard />
+          </AdminRoute>
         }
       />
     </Routes>

@@ -27,6 +27,7 @@ export const authApi = {
   register: (payload) => apiClient.post("/auth/register", payload),
   login: (payload) => apiClient.post("/auth/login", payload),
   loginWithGoogle: (payload) => apiClient.post("/auth/google", payload),
+  adminPanelLogin: (payload) => apiClient.post("/auth/admin-login", payload),
   me: (token) => apiClient.get("/auth/me", createAuthConfig(token)),
   forgotPassword: (email) => apiClient.post("/auth/forgot-password", { email }),
   resetPassword: (token, password) =>
@@ -48,6 +49,11 @@ export const messageApi = {
 export const conversationApi = {
   withUser: (token, userId) =>
     apiClient.get(`/conversations/with/${userId}`, createAuthConfig(token)),
+};
+
+export const adminApi = {
+  analytics: (token) =>
+    apiClient.get("/admin/analytics", createAuthConfig(token)),
 };
 
 export const userApi = {

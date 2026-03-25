@@ -26,6 +26,7 @@ const auth = async (req, res, next) => {
       name: user.name,
       email: user.email,
       avatar: user.avatar || createDefaultAvatar(user.name),
+      role: user.role || "user",
     };
 
     next();

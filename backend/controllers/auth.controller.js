@@ -4,6 +4,7 @@ const {
   registerService,
   loginService,
   googleLoginService,
+  adminPanelLoginService,
   forgotPasswordService,
   resetPasswordService,
   sendOTPService,
@@ -49,6 +50,20 @@ const googleLogin = asyncHandler(async (req, res) => {
 
   res.status(200).json(
     new ApiResponse(200, "Login successful", result)
+  );
+});
+
+const adminPanelLogin = asyncHandler(async (req, res) => {
+  const { email, userId, password } = req.body;
+
+  if (!password) {
+    return res.status(400).json(new ApiResponse(400, "Master password is required"));
+  }
+
+  const result = await adminPanelLoginService({ email, userId, password });
+
+  res.status(200).json(
+    new ApiResponse(200, "Admin login successful", result)
   );
 });
 
@@ -105,6 +120,7 @@ module.exports = {
   register,
   login,
   googleLogin,
+  adminPanelLogin,
   getCurrentUser,
   forgotPassword,
   resetPassword,
