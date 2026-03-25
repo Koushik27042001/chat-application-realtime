@@ -115,7 +115,12 @@ const Login = () => {
           padding: 1.25rem;
           position: relative;
           overflow: hidden;
-          background: radial-gradient(ellipse 80% 60% at 50% -10%, #1a0a3c 0%, #080b14 70%);
+          background:
+            linear-gradient(180deg, rgba(8,11,20,0.7), rgba(8,11,20,0.85)),
+            url("/src/assets/bg_pic.jpg");
+          background-size: cover;
+          background-position: center;
+          background-attachment: fixed;
         }
         .login-root::before {
           content: '';
@@ -145,10 +150,10 @@ const Login = () => {
           width: 100%; max-width: 980px;
           display: grid; grid-template-columns: 1fr;
           border-radius: 1.75rem; overflow: hidden;
-          border: 1px solid rgba(255,255,255,0.08);
-          box-shadow: 0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(167,139,250,0.06) inset;
-          background: rgba(10,12,24,0.72);
-          backdrop-filter: blur(28px) saturate(1.5);
+          border: 1px solid rgba(255,255,255,0.12);
+          box-shadow: 0 40px 100px rgba(0,0,0,0.55), 0 0 0 1px rgba(167,139,250,0.08) inset;
+          background: rgba(10,12,24,0.38);
+          backdrop-filter: blur(30px) saturate(1.35);
           opacity: 0;
           transform: translateY(28px) scale(0.98);
           transition: opacity 0.55s cubic-bezier(.4,0,.2,1), transform 0.55s cubic-bezier(.4,0,.2,1);
@@ -161,8 +166,9 @@ const Login = () => {
           padding: 3rem 3rem 3rem 3.5rem;
           background: linear-gradient(135deg, rgba(109,40,217,0.22) 0%, rgba(14,165,233,0.1) 100%);
           border-right: 1px solid rgba(255,255,255,0.06);
-          flex-direction: column; justify-content: space-between;
+          flex-direction: column; justify-content: flex-start;
           position: relative; overflow: hidden;
+          gap: 1.5rem;
         }
         @media (min-width: 768px) { .panel-left { display: flex; } }
         .panel-left::after {
@@ -200,6 +206,24 @@ const Login = () => {
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
           background-clip: text;
+        }
+
+        .left-hero {
+          width: 100%;
+          height: 240px;
+          border-radius: 1.2rem;
+          background:
+            linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.35)),
+            url("/src/assets/bg_pic.jpg");
+          background-size: cover;
+          background-position: center;
+          border: 1px solid rgba(255,255,255,0.12);
+          box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+        }
+        .left-hero-desc {
+          font-size: 0.85rem;
+          color: #b6c2d1;
+          line-height: 1.7;
         }
         .panel-sub {
           margin-top: 1.25rem; font-size: 0.875rem;
@@ -334,35 +358,19 @@ const Login = () => {
           <div className="panel-left">
             <div className="deco-circle" style={{ width: 300, height: 300, bottom: -100, right: -80, opacity: 0.15 }} />
             <div className="deco-circle" style={{ width: 180, height: 180, bottom: -40, right: -20, opacity: 0.1 }} />
-
-            <div>
-              <div className="brand-badge">
-                <span className="brand-badge-dot" />
-                Secure Access
-              </div>
-              <h1 className="panel-title">
-                Your ideas,<br /><span>amplified</span><br />by AI.
-              </h1>
-              <p className="panel-sub">
-                Sign in to your workspace and pick up exactly where you left
-                off — conversations, history, everything intact.
-              </p>
-              <div className="feature-list">
-                {[
-                  { icon: "🔒", text: "End-to-end encrypted sessions" },
-                  { icon: "⚡", text: "Instant response, zero lag" },
-                  { icon: "💾", text: "Full conversation history saved" },
-                ].map((f, i) => (
-                  <div className="feature-item" key={i}>
-                    <div className="feature-icon">{f.icon}</div>
-                    <span>{f.text}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="brand-badge">
+              <span className="brand-badge-dot" />
+              Secure Access
             </div>
+            <h1 className="panel-title">
+              Your ideas,<br /><span>amplified</span><br />by AI.
+            </h1>
+            <div className="left-hero" />
+            <p className="left-hero-desc">
+              Recent chats, shared files, and your workspace history stay right where you left them.
+            </p>
           </div>
-
-          {/* ── Right Panel ── */}
+          {/* Right Panel */}
           <div className="panel-right">
             <div className={`reveal d1 ${mounted ? "show" : ""}`}>
               <p className="form-title">Welcome back 👋</p>
@@ -464,3 +472,5 @@ const Login = () => {
 };
 
 export default Login;
+
+
