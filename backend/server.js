@@ -70,7 +70,7 @@ const startServer = async () => {
     await connectDB();
 
     const activePort = await listenOnPort(PORT);
-    console.log(`Server running on port ${activePort}`);
+    console.log(`🚀 Server running on port ${activePort}`);
   } catch (error) {
     console.error("Server failed:", error.message);
     process.exit(1);
