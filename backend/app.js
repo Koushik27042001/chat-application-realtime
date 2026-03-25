@@ -25,7 +25,7 @@ app.use(
   })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 
 app.use((req, res, next) => {
   const start = Date.now();

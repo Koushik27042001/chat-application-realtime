@@ -2,13 +2,13 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-/* Animated Input */
+/* ─── Animated Floating Input ─────────────────────────────────── */
 const FloatingInput = ({ label, type, name, value, onChange, children }) => {
   const [focused, setFocused] = useState(false);
   const active = focused || value.length > 0;
 
   return (
-    <div className="relative">
+    <div style={{ position: "relative" }}>
       <label
         style={{
           position: "absolute",
@@ -50,7 +50,15 @@ const FloatingInput = ({ label, type, name, value, onChange, children }) => {
         }}
       />
       {children && (
-        <div style={{ position: "absolute", insetInlineEnd: "0", top: 0, bottom: 0, display: "flex", alignItems: "center", paddingRight: "1rem" }}>
+        <div style={{
+          position: "absolute",
+          insetInlineEnd: "0",
+          top: 0,
+          bottom: 0,
+          display: "flex",
+          alignItems: "center",
+          paddingRight: "1rem",
+        }}>
           {children}
         </div>
       )}
@@ -58,7 +66,7 @@ const FloatingInput = ({ label, type, name, value, onChange, children }) => {
   );
 };
 
-/* Main Component */
+/* ─── Main Component ──────────────────────────────────────────── */
 const Login = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -93,16 +101,11 @@ const Login = () => {
 
   return (
     <>
-      {/* Global styles injected via <style> */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-          background: #080b14;
-          font-family: 'DM Sans', sans-serif;
-        }
+        body { background: #080b14; font-family: 'DM Sans', sans-serif; }
 
         .login-root {
           min-height: 100dvh;
@@ -114,63 +117,34 @@ const Login = () => {
           overflow: hidden;
           background: radial-gradient(ellipse 80% 60% at 50% -10%, #1a0a3c 0%, #080b14 70%);
         }
-
-        /* grid noise texture */
         .login-root::before {
           content: '';
-          position: fixed;
-          inset: 0;
+          position: fixed; inset: 0;
           background-image:
             linear-gradient(rgba(167,139,250,0.03) 1px, transparent 1px),
             linear-gradient(90deg, rgba(167,139,250,0.03) 1px, transparent 1px);
           background-size: 40px 40px;
-          pointer-events: none;
-          z-index: 0;
-        }
-
-        /* floating orbs */
-        .orb-1 {
-          width: 500px; height: 500px;
-          background: radial-gradient(circle, #7c3aed 0%, transparent 70%);
-          top: -160px; left: -120px;
-          animation: drift1 14s ease-in-out infinite;
-        }
-        .orb-2 {
-          width: 380px; height: 380px;
-          background: radial-gradient(circle, #0ea5e9 0%, transparent 70%);
-          bottom: -100px; right: -80px;
-          animation: drift2 18s ease-in-out infinite;
-        }
-        .orb-3 {
-          width: 200px; height: 200px;
-          background: radial-gradient(circle, #f472b6 0%, transparent 70%);
-          top: 45%; right: 10%;
-          animation: drift3 11s ease-in-out infinite;
+          pointer-events: none; z-index: 0;
         }
 
         @keyframes drift1 {
           0%,100% { transform: translate(0,0) scale(1); }
-          50%      { transform: translate(40px, 50px) scale(1.08); }
+          50%      { transform: translate(40px,50px) scale(1.08); }
         }
         @keyframes drift2 {
           0%,100% { transform: translate(0,0) scale(1); }
-          50%      { transform: translate(-35px, -40px) scale(1.1); }
+          50%      { transform: translate(-35px,-40px) scale(1.1); }
         }
         @keyframes drift3 {
           0%,100% { transform: translate(0,0); }
-          50%      { transform: translate(20px, -30px); }
+          50%      { transform: translate(20px,-30px); }
         }
 
-        /* card */
         .card {
-          position: relative;
-          z-index: 1;
-          width: 100%;
-          max-width: 980px;
-          display: grid;
-          grid-template-columns: 1fr;
-          border-radius: 1.75rem;
-          overflow: hidden;
+          position: relative; z-index: 1;
+          width: 100%; max-width: 980px;
+          display: grid; grid-template-columns: 1fr;
+          border-radius: 1.75rem; overflow: hidden;
           border: 1px solid rgba(255,255,255,0.08);
           box-shadow: 0 40px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(167,139,250,0.06) inset;
           background: rgba(10,12,24,0.72);
@@ -180,52 +154,35 @@ const Login = () => {
           transition: opacity 0.55s cubic-bezier(.4,0,.2,1), transform 0.55s cubic-bezier(.4,0,.2,1);
         }
         .card.show { opacity: 1; transform: translateY(0) scale(1); }
+        @media (min-width: 768px) { .card { grid-template-columns: 1.1fr 0.9fr; } }
 
-        @media (min-width: 768px) {
-          .card { grid-template-columns: 1.1fr 0.9fr; }
-        }
-
-        /* left panel */
         .panel-left {
           display: none;
           padding: 3rem 3rem 3rem 3.5rem;
           background: linear-gradient(135deg, rgba(109,40,217,0.22) 0%, rgba(14,165,233,0.1) 100%);
           border-right: 1px solid rgba(255,255,255,0.06);
-          flex-direction: column;
-          justify-content: space-between;
-          position: relative;
-          overflow: hidden;
+          flex-direction: column; justify-content: space-between;
+          position: relative; overflow: hidden;
         }
         @media (min-width: 768px) { .panel-left { display: flex; } }
-
         .panel-left::after {
-          content: '';
-          position: absolute;
-          bottom: 0; left: 0; right: 0;
+          content: ''; position: absolute; bottom: 0; left: 0; right: 0;
           height: 1px;
           background: linear-gradient(90deg, transparent, rgba(167,139,250,0.4), transparent);
         }
 
         .brand-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.45rem;
+          display: inline-flex; align-items: center; gap: 0.45rem;
           background: rgba(167,139,250,0.12);
           border: 1px solid rgba(167,139,250,0.25);
-          border-radius: 2rem;
-          padding: 0.35rem 0.85rem;
-          font-size: 0.72rem;
-          font-weight: 600;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          color: #c4b5fd;
-          width: fit-content;
+          border-radius: 2rem; padding: 0.35rem 0.85rem;
+          font-size: 0.72rem; font-weight: 600;
+          letter-spacing: 0.12em; text-transform: uppercase;
+          color: #c4b5fd; width: fit-content;
         }
         .brand-badge-dot {
-          width: 6px; height: 6px;
-          border-radius: 50%;
-          background: #a78bfa;
-          animation: pulse 2s infinite;
+          width: 6px; height: 6px; border-radius: 50%;
+          background: #a78bfa; animation: pulse 2s infinite;
         }
         @keyframes pulse {
           0%,100% { opacity: 1; transform: scale(1); }
@@ -235,11 +192,8 @@ const Login = () => {
         .panel-title {
           font-family: 'Syne', sans-serif;
           font-size: clamp(2rem, 3.5vw, 3rem);
-          font-weight: 800;
-          line-height: 1.12;
-          color: #f8fafc;
-          margin-top: 2rem;
-          letter-spacing: -0.02em;
+          font-weight: 800; line-height: 1.12;
+          color: #f8fafc; margin-top: 2rem; letter-spacing: -0.02em;
         }
         .panel-title span {
           background: linear-gradient(135deg, #a78bfa, #38bdf8);
@@ -247,126 +201,56 @@ const Login = () => {
           -webkit-text-fill-color: transparent;
           background-clip: text;
         }
-
         .panel-sub {
-          margin-top: 1.25rem;
-          font-size: 0.875rem;
-          color: #94a3b8;
-          line-height: 1.7;
-          max-width: 320px;
+          margin-top: 1.25rem; font-size: 0.875rem;
+          color: #94a3b8; line-height: 1.7; max-width: 320px;
         }
-
-        .feature-list {
-          margin-top: 2.5rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.85rem;
-        }
-        .feature-item {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          font-size: 0.82rem;
-          color: #cbd5e1;
-        }
+        .feature-list { margin-top: 2.5rem; display: flex; flex-direction: column; gap: 0.85rem; }
+        .feature-item { display: flex; align-items: center; gap: 0.75rem; font-size: 0.82rem; color: #cbd5e1; }
         .feature-icon {
-          width: 48px; height: 28px;
-          border-radius: 0.5rem;
-          background: rgba(167,139,250,0.15);
-          border: 1px solid rgba(167,139,250,0.2);
+          width: 28px; height: 28px; border-radius: 0.5rem;
+          background: rgba(167,139,250,0.15); border: 1px solid rgba(167,139,250,0.2);
           display: flex; align-items: center; justify-content: center;
-          font-size: 0.7rem;
-          letter-spacing: 0.08em;
-          flex-shrink: 0;
+          font-size: 0.8rem; flex-shrink: 0;
         }
+        .deco-circle { position: absolute; border-radius: 50%; border: 1px solid rgba(167,139,250,0.15); }
 
-        .deco-circle {
-          position: absolute;
-          border-radius: 50%;
-          border: 1px solid rgba(167,139,250,0.15);
-        }
-
-        /* right panel */
         .panel-right {
           padding: 2.5rem 2rem;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
+          display: flex; flex-direction: column; justify-content: center;
         }
         @media (min-width: 480px) { .panel-right { padding: 3rem 2.75rem; } }
 
         .form-title {
-          font-family: 'Syne', sans-serif;
-          font-size: 1.85rem;
-          font-weight: 700;
-          color: #f1f5f9;
-          letter-spacing: -0.02em;
+          font-family: 'Syne', sans-serif; font-size: 1.85rem;
+          font-weight: 700; color: #f1f5f9; letter-spacing: -0.02em;
         }
-        .form-sub {
-          margin-top: 0.4rem;
-          font-size: 0.83rem;
-          color: #64748b;
-        }
+        .form-sub { margin-top: 0.4rem; font-size: 0.83rem; color: #64748b; }
 
-        /* divider */
-        .divider {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          margin: 1.5rem 0;
-        }
+        .divider { display: flex; align-items: center; gap: 0.75rem; margin: 1.5rem 0; }
         .divider::before, .divider::after {
-          content: '';
-          flex: 1;
-          height: 1px;
-          background: rgba(255,255,255,0.07);
+          content: ''; flex: 1; height: 1px; background: rgba(255,255,255,0.07);
         }
-        .divider span {
-          font-size: 0.72rem;
-          color: #475569;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-        }
+        .divider span { font-size: 0.72rem; color: #475569; letter-spacing: 0.06em; text-transform: uppercase; }
 
-        /* social btn */
         .social-btn {
-          width: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.65rem;
-          padding: 0.75rem 1rem;
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.09);
-          border-radius: 0.85rem;
-          color: #cbd5e1;
-          font-size: 0.85rem;
-          font-weight: 500;
-          cursor: pointer;
-          transition: background 0.18s, border-color 0.18s, transform 0.15s;
+          width: 100%; display: flex; align-items: center; justify-content: center;
+          gap: 0.65rem; padding: 0.75rem 1rem;
+          background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.09);
+          border-radius: 0.85rem; color: #cbd5e1; font-size: 0.85rem; font-weight: 500;
+          cursor: pointer; transition: background 0.18s, border-color 0.18s, transform 0.15s;
           font-family: 'DM Sans', sans-serif;
         }
-        .social-btn:hover {
-          background: rgba(255,255,255,0.08);
-          border-color: rgba(255,255,255,0.16);
-          transform: translateY(-1px);
-        }
+        .social-btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.16); transform: translateY(-1px); }
         .social-btn:active { transform: translateY(0); }
 
-        /* form fields wrapper */
         .fields { display: flex; flex-direction: column; gap: 1rem; margin-top: 0.5rem; }
 
-        /* error */
         .error-box {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.7rem 0.9rem;
-          background: rgba(239,68,68,0.1);
-          border: 1px solid rgba(239,68,68,0.25);
-          border-radius: 0.75rem;
-          color: #fca5a5;
-          font-size: 0.8rem;
+          display: flex; align-items: center; gap: 0.5rem;
+          padding: 0.7rem 0.9rem; margin-top: 1rem;
+          background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25);
+          border-radius: 0.75rem; color: #fca5a5; font-size: 0.8rem;
           animation: shake 0.35s ease;
         }
         @keyframes shake {
@@ -375,107 +259,59 @@ const Login = () => {
           75%      { transform: translateX(6px); }
         }
 
-        /* submit btn */
         .submit-btn {
-          position: relative;
-          width: 100%;
-          padding: 0.95rem;
+          position: relative; width: 100%; padding: 0.95rem;
           border-radius: 1rem;
-          font-family: 'Syne', sans-serif;
-          font-size: 0.95rem;
-          font-weight: 700;
-          color: #fff;
-          letter-spacing: 0.02em;
-          cursor: pointer;
-          border: none;
-          overflow: hidden;
+          font-family: 'Syne', sans-serif; font-size: 0.95rem;
+          font-weight: 700; color: #fff; letter-spacing: 0.02em;
+          cursor: pointer; border: none; overflow: hidden;
           background: linear-gradient(135deg, #7c3aed 0%, #2563eb 100%);
           transition: opacity 0.2s, transform 0.18s, box-shadow 0.2s;
           box-shadow: 0 4px 24px rgba(124,58,237,0.4);
         }
         .submit-btn::before {
-          content: '';
-          position: absolute;
-          inset: 0;
+          content: ''; position: absolute; inset: 0;
           background: linear-gradient(135deg, #6d28d9 0%, #1d4ed8 100%);
-          opacity: 0;
-          transition: opacity 0.22s;
+          opacity: 0; transition: opacity 0.22s;
         }
         .submit-btn:hover:not(:disabled)::before { opacity: 1; }
         .submit-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(124,58,237,0.55); }
         .submit-btn:active:not(:disabled) { transform: translateY(0); }
         .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .submit-btn span { position: relative; z-index: 1; }
-
         .submit-btn .shimmer {
-          position: absolute;
-          top: 0; left: -100%;
-          width: 60%;
-          height: 100%;
+          position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
           background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
-          animation: shimmer 2.5s infinite;
-          z-index: 1;
+          animation: shimmer 2.5s infinite; z-index: 1;
         }
-        @keyframes shimmer {
-          0%   { left: -100%; }
-          100% { left: 200%; }
-        }
+        @keyframes shimmer { 0% { left: -100%; } 100% { left: 200%; } }
 
         .spinner {
-          display: inline-block;
-          width: 16px; height: 16px;
-          border: 2px solid rgba(255,255,255,0.3);
-          border-top-color: #fff;
-          border-radius: 50%;
-          animation: spin 0.7s linear infinite;
-          vertical-align: middle;
-          margin-right: 0.5rem;
+          display: inline-block; width: 16px; height: 16px;
+          border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+          border-radius: 50%; animation: spin 0.7s linear infinite;
+          vertical-align: middle; margin-right: 0.5rem;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .footer-link {
-          margin-top: 1.5rem;
-          text-align: center;
-          font-size: 0.82rem;
-          color: #475569;
-        }
-        .footer-link a {
-          color: #a78bfa;
-          font-weight: 600;
-          text-decoration: none;
-          transition: color 0.15s;
-        }
+        .footer-link { margin-top: 1.5rem; text-align: center; font-size: 0.82rem; color: #475569; }
+        .footer-link a { color: #a78bfa; font-weight: 600; text-decoration: none; transition: color 0.15s; }
         .footer-link a:hover { color: #c4b5fd; }
 
-        /* show password toggle */
         .eye-btn {
-          background: none;
-          border: none;
-          cursor: pointer;
-          color: #64748b;
-          display: flex;
-          align-items: center;
-          padding: 0.25rem;
-          transition: color 0.15s;
+          background: none; border: none; cursor: pointer; color: #64748b;
+          display: flex; align-items: center; padding: 0.25rem; transition: color 0.15s;
         }
         .eye-btn:hover { color: #a78bfa; }
 
-        /* forgot */
         .forgot {
-          display: block;
-          text-align: right;
-          font-size: 0.78rem;
-          color: #a78bfa;
-          text-decoration: none;
-          margin-top: 0.25rem;
-          transition: color 0.15s;
+          display: block; text-align: right; font-size: 0.78rem;
+          color: #a78bfa; text-decoration: none; margin-top: 0.25rem; transition: color 0.15s;
         }
         .forgot:hover { color: #c4b5fd; }
 
-        /* stagger reveals */
         .reveal {
-          opacity: 0;
-          transform: translateY(16px);
+          opacity: 0; transform: translateY(16px);
           transition: opacity 0.45s cubic-bezier(.4,0,.2,1), transform 0.45s cubic-bezier(.4,0,.2,1);
         }
         .reveal.show { opacity: 1; transform: none; }
@@ -488,14 +324,14 @@ const Login = () => {
 
       <main className="login-root">
         {/* Ambient orbs */}
-        <div className="orb-1" style={{ position: "absolute", borderRadius: "50%", filter: "blur(80px)", opacity: 0.25, width: 500, height: 500, top: -160, left: -120, background: "radial-gradient(circle, #7c3aed 0%, transparent 70%)", animation: "drift1 14s ease-in-out infinite" }} />
-        <div className="orb-2" style={{ position: "absolute", borderRadius: "50%", filter: "blur(80px)", opacity: 0.2, width: 380, height: 380, bottom: -100, right: -80, background: "radial-gradient(circle, #0ea5e9 0%, transparent 70%)", animation: "drift2 18s ease-in-out infinite" }} />
-        <div className="orb-3" style={{ position: "absolute", borderRadius: "50%", filter: "blur(60px)", opacity: 0.18, width: 200, height: 200, top: "45%", right: "10%", background: "radial-gradient(circle, #f472b6 0%, transparent 70%)", animation: "drift3 11s ease-in-out infinite" }} />
+        <div style={{ position: "absolute", borderRadius: "50%", filter: "blur(80px)", opacity: 0.25, width: 500, height: 500, top: -160, left: -120, background: "radial-gradient(circle, #7c3aed 0%, transparent 70%)", animation: "drift1 14s ease-in-out infinite", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", borderRadius: "50%", filter: "blur(80px)", opacity: 0.2, width: 380, height: 380, bottom: -100, right: -80, background: "radial-gradient(circle, #0ea5e9 0%, transparent 70%)", animation: "drift2 18s ease-in-out infinite", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", borderRadius: "50%", filter: "blur(60px)", opacity: 0.18, width: 200, height: 200, top: "45%", right: "10%", background: "radial-gradient(circle, #f472b6 0%, transparent 70%)", animation: "drift3 11s ease-in-out infinite", pointerEvents: "none" }} />
 
         <div className={`card ${mounted ? "show" : ""}`}>
-          {/* Left Panel */}
+
+          {/* ── Left Panel ── */}
           <div className="panel-left">
-            {/* decorative rings */}
             <div className="deco-circle" style={{ width: 300, height: 300, bottom: -100, right: -80, opacity: 0.15 }} />
             <div className="deco-circle" style={{ width: 180, height: 180, bottom: -40, right: -20, opacity: 0.1 }} />
 
@@ -508,16 +344,14 @@ const Login = () => {
                 Your ideas,<br /><span>amplified</span><br />by AI.
               </h1>
               <p className="panel-sub">
-                Sign in to your workspace and pick up exactly where you left off - conversations, history, everything intact.
+                Sign in to your workspace and pick up exactly where you left
+                off — conversations, history, everything intact.
               </p>
-            </div>
-
-            <div>
               <div className="feature-list">
                 {[
-                  { icon: "LOCK", text: "End-to-end encrypted sessions" },
-                  { icon: "FAST", text: "Instant response, zero lag" },
-                  { icon: "SAVE", text: "Full conversation history saved" },
+                  { icon: "🔒", text: "End-to-end encrypted sessions" },
+                  { icon: "⚡", text: "Instant response, zero lag" },
+                  { icon: "💾", text: "Full conversation history saved" },
                 ].map((f, i) => (
                   <div className="feature-item" key={i}>
                     <div className="feature-icon">{f.icon}</div>
@@ -528,14 +362,14 @@ const Login = () => {
             </div>
           </div>
 
-          {/* Right Panel */}
+          {/* ── Right Panel ── */}
           <div className="panel-right">
             <div className={`reveal d1 ${mounted ? "show" : ""}`}>
-              <p className="form-title">Welcome back</p>
+              <p className="form-title">Welcome back 👋</p>
               <p className="form-sub">Sign in to continue to your dashboard</p>
             </div>
 
-            {/* Social login */}
+            {/* Google SSO */}
             <div className={`reveal d2 ${mounted ? "show" : ""}`} style={{ marginTop: "1.75rem" }}>
               <button className="social-btn" type="button">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -554,9 +388,21 @@ const Login = () => {
 
             <form onSubmit={handleSubmit}>
               <div className={`fields reveal d3 ${mounted ? "show" : ""}`}>
-                <FloatingInput label="Email address" type="email" name="email" value={formData.email} onChange={handleChange} />
+                <FloatingInput
+                  label="Email address"
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                />
                 <div>
-                  <FloatingInput label="Password" type={showPassword ? "text" : "password"} name="password" value={formData.password} onChange={handleChange}>
+                  <FloatingInput
+                    label="Password"
+                    type={showPassword ? "text" : "password"}
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                  >
                     <button
                       type="button"
                       className="eye-btn"
@@ -582,7 +428,7 @@ const Login = () => {
               </div>
 
               {error && (
-                <div className="error-box" style={{ marginTop: "1rem" }}>
+                <div className="error-box">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <circle cx="12" cy="12" r="10" />
                     <line x1="12" y1="8" x2="12" y2="12" />
@@ -597,11 +443,10 @@ const Login = () => {
                   <div className="shimmer" />
                   <span>
                     {isSubmitting ? (
-                      <>
-                        <span className="spinner" />
-                        Signing you in...
-                      </>
-                    ) : "Enter Dashboard"}
+                      <><span className="spinner" />Signing you in…</>
+                    ) : (
+                      "Enter Dashboard →"
+                    )}
                   </span>
                 </button>
               </div>

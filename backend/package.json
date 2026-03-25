@@ -15,6 +15,7 @@
         "crypto": "^1.0.1",
         "dotenv": "^16.4.5",
         "express": "^4.21.2",
+        "firebase-admin": "^12.6.0",
         "jsonwebtoken": "^9.0.2",
         "mongoose": "^8.9.5",
         "nodemailer": "^8.0.3",

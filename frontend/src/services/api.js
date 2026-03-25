@@ -56,4 +56,6 @@ export const userApi = {
   },
   get: (token, userId) =>
     apiClient.get(`/users/${userId}`, createAuthConfig(token)),
+  updateAvatar: (token, avatar) =>
+    apiClient.patch("/users/me/avatar", { avatar }, createAuthConfig(token)),
 };

@@ -7,6 +7,7 @@ let socket;
 
 const useSocket = ({ userId, onMessage } = {}) => {
   const [isConnected, setIsConnected] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState([]);
   const hasAttemptedRef = useRef(false);
 
   useEffect(() => {
@@ -42,12 +43,17 @@ const useSocket = ({ userId, onMessage } = {}) => {
           onMessage(message);
         }
       });
+
+      socket.on("online-users", (users) => {
+        setOnlineUsers(Array.isArray(users) ? users : []);
+      });
     } catch (error) {
       setIsConnected(false);
     }
 
     return () => {
       if (socket) {
+        socket.off("online-users");
         socket.disconnect();
       }
     };
@@ -59,7 +65,7 @@ const useSocket = ({ userId, onMessage } = {}) => {
     }
   }, [userId]);
 
-  return { socket, isConnected };
+  return { socket, isConnected, onlineUsers };
 };
 
 export default useSocket;

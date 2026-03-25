@@ -25,18 +25,47 @@ const normalizeMessage = (msg, currentUserId) => {
 };
 
 /* ─── avatar initials ─────────────────────────────────────────── */
-const Avatar = ({ name = "?", size = 36, online = false }) => {
+const Avatar = ({ name = "?", size = 36, online = false, src }) => {
+  const [imgError, setImgError] = useState(false);
   const initials = name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   const hue = [...name].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
   return (
     <div style={{ position: "relative", flexShrink: 0, width: size, height: size }}>
-      <div style={{
-        width: size, height: size, borderRadius: "50%",
-        background: `linear-gradient(135deg, hsl(${hue},60%,55%), hsl(${(hue+60)%360},60%,45%))`,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: "'Syne', sans-serif", fontWeight: 700,
-        fontSize: size * 0.36, color: "#fff", userSelect: "none",
-      }}>{initials}</div>
+      {src && !imgError ? (
+        <img
+          src={src}
+          alt={name}
+          width={size}
+          height={size}
+          style={{
+            width: size,
+            height: size,
+            borderRadius: "50%",
+            objectFit: "cover",
+            display: "block",
+          }}
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div
+          style={{
+            width: size,
+            height: size,
+            borderRadius: "50%",
+            background: `linear-gradient(135deg, hsl(${hue},60%,55%), hsl(${(hue + 60) % 360},60%,45%))`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontFamily: "'Syne', sans-serif",
+            fontWeight: 700,
+            fontSize: size * 0.36,
+            color: "#fff",
+            userSelect: "none",
+          }}
+        >
+          {initials}
+        </div>
+      )}
       {online && (
         <span style={{
           position: "absolute", bottom: 1, right: 1,
@@ -49,7 +78,7 @@ const Avatar = ({ name = "?", size = 36, online = false }) => {
 };
 
 /* ─── contact row in sidebar ──────────────────────────────────── */
-const ContactRow = ({ contact, active, onClick }) => (
+const ContactRow = ({ contact, active, onClick, online }) => (
   <button
     onClick={() => onClick(contact)}
     style={{
@@ -62,7 +91,7 @@ const ContactRow = ({ contact, active, onClick }) => (
     onMouseEnter={e => { if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.05)"; }}
     onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}
   >
-    <Avatar name={contact.name} size={40} online={Math.random() > 0.4} />
+    <Avatar name={contact.name} size={40} online={online} src={contact.avatar} />
     <div style={{ flex: 1, minWidth: 0 }}>
       <p style={{
         fontFamily: "'Syne',sans-serif", fontWeight: 600, fontSize: "0.82rem",
@@ -204,7 +233,7 @@ const SearchBar = ({ value, onChange }) => (
 /* ═══════════════════════════════════════════════════════════════ */
 export default function Chat() {
   const navigate = useNavigate();
-  const { logout, token, user } = useAuth();
+  const { logout, token, user, saveAuth } = useAuth();
 
   const [contacts, setContacts] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -216,6 +245,7 @@ export default function Chat() {
   const activeChatIdRef = useRef(null);
   const contactsRef = useRef([]);
   const messagesEndRef = useRef(null);
+  const avatarInputRef = useRef(null);
 
   /* auto-scroll */
   useEffect(() => {
@@ -239,7 +269,7 @@ export default function Chat() {
     }
   };
 
-  const { socket, isConnected } = useSocket({ userId: user?.id, onMessage: handleIncomingMessage });
+  const { socket, isConnected, onlineUsers } = useSocket({ userId: user?.id, onMessage: handleIncomingMessage });
 
   useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
   useEffect(() => { contactsRef.current = contacts; }, [contacts]);
@@ -249,7 +279,7 @@ export default function Chat() {
     if (!token) return;
     userApi.list(token).then(({ data }) => {
       const next = data.map((c) => ({
-        id: c.id, name: c.name, email: c.email,
+        id: c.id, name: c.name, email: c.email, avatar: c.avatar,
         conversationId: null, lastMessage: "Tap to start chatting.",
       }));
       setContacts(next);
@@ -289,6 +319,11 @@ export default function Chat() {
     );
   }, [contacts, searchTerm]);
 
+  const onlineSet = useMemo(
+    () => new Set((onlineUsers || []).map((id) => String(id))),
+    [onlineUsers]
+  );
+
   const activeContact =
     filteredContacts.find((c) => c.id === activeChatId) ||
     contacts.find((c) => c.id === activeChatId) ||
@@ -310,6 +345,29 @@ export default function Chat() {
   };
 
   const handleLogout = () => { logout(); navigate("/login"); };
+
+  const handleAvatarUpload = async (file) => {
+    if (!token || !file) return;
+    if (!file.type?.startsWith("image/")) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const dataUrl = reader.result;
+        const { data } = await userApi.updateAvatar(token, dataUrl);
+        saveAuth({ token, user: data });
+      } catch {}
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAutoAvatar = async () => {
+    if (!token) return;
+    try {
+      const { data } = await userApi.updateAvatar(token, "auto");
+      saveAuth({ token, user: data });
+    } catch {}
+  };
 
   /* ─── render ─────────────────────────────────────────────────── */
   return (
@@ -540,12 +598,20 @@ export default function Chat() {
           padding: 0.75rem 0.85rem;
           border-top: 1px solid rgba(255,255,255,0.05);
           display: flex; align-items: center; gap: 0.65rem;
+          flex-wrap: wrap;
         }
         .sidebar-footer-name {
           font-size: 0.8rem; font-weight: 600; color: #cbd5e1;
           font-family: 'Syne', sans-serif;
         }
         .sidebar-footer-email { font-size: 0.68rem; color: #475569; }
+        .sidebar-footer-actions {
+          margin-left: auto;
+          display: flex;
+          gap: 0.4rem;
+          width: 100%;
+          justify-content: flex-end;
+        }
 
         /* reveal */
         .reveal { opacity: 0; transform: translateY(12px);
@@ -593,16 +659,56 @@ export default function Chat() {
                 key={c.id}
                 contact={c}
                 active={c.id === activeContact?.id}
+                online={onlineSet.has(String(c.id))}
                 onClick={(contact) => { setActiveChatId(contact.id); setSidebarOpen(false); }}
               />
             ))}
           </div>
 
           <div className="sidebar-footer">
-            <Avatar name={user?.name || "Me"} size={34} online />
+            <Avatar name={user?.name || "Me"} size={34} online={isConnected} src={user?.avatar} />
             <div>
               <p className="sidebar-footer-name">{user?.name || "You"}</p>
               <p className="sidebar-footer-email">{user?.email || ""}</p>
+            </div>
+            <div className="sidebar-footer-actions">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={(e) => handleAvatarUpload(e.target.files?.[0])}
+              />
+              <button
+                type="button"
+                onClick={() => avatarInputRef.current?.click()}
+                style={{
+                  padding: "0.35rem 0.6rem",
+                  fontSize: "0.68rem",
+                  borderRadius: "0.5rem",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "#cbd5e1",
+                  cursor: "pointer",
+                }}
+              >
+                Upload
+              </button>
+              <button
+                type="button"
+                onClick={handleAutoAvatar}
+                style={{
+                  padding: "0.35rem 0.6rem",
+                  fontSize: "0.68rem",
+                  borderRadius: "0.5rem",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "#cbd5e1",
+                  cursor: "pointer",
+                }}
+              >
+                Auto
+              </button>
             </div>
           </div>
         </aside>
@@ -645,11 +751,11 @@ export default function Chat() {
             <>
               {/* Chat header bar */}
               <div className={`chat-header-bar reveal d1 ${mounted ? "show" : ""}`}>
-                <Avatar name={activeContact.name} size={38} online />
+                <Avatar name={activeContact.name} size={38} online={onlineSet.has(String(activeContact.id))} src={activeContact.avatar} />
                 <div>
                   <p className="chat-contact-name">{activeContact.name}</p>
-                  <p className={`chat-contact-status ${isConnected ? "online" : ""}`}>
-                    {isConnected ? "● Active now" : "○ Offline"}
+                  <p className={`chat-contact-status ${onlineSet.has(String(activeContact.id)) ? "online" : ""}`}>
+                    {onlineSet.has(String(activeContact.id)) ? "● Active now" : "○ Offline"}
                   </p>
                 </div>
                 {/* action icons */}

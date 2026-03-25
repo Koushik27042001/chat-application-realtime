@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const userRepository = require("../repositories/user.repository");
 const sendEmail = require("./email.service");
+const { createDefaultAvatar } = require("../utils/avatar");
 
 const createToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
@@ -14,6 +15,7 @@ const sanitizeUser = (user) => ({
   id: user._id.toString(),
   name: user.name,
   email: user.email,
+  avatar: user.avatar || createDefaultAvatar(user.name),
 });
 
 const registerService = async (name, email, password) => {
@@ -29,6 +31,7 @@ const registerService = async (name, email, password) => {
     name,
     email: email.toLowerCase(),
     password: hashedPassword,
+    avatar: createDefaultAvatar(name),
   });
 
   return {

@@ -5,6 +5,7 @@ const { Server } = require("socket.io");
 
 const app = require("./app");
 const connectDB = require("./config/db");
+const { initFirebaseAdmin } = require("./firebaseAdmin");
 const initializeSocket = require("./socket/socket");
 
 const allowedOrigin =
@@ -28,6 +29,7 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
+    initFirebaseAdmin();
     console.log("Connecting to MongoDB...");
     await connectDB();
 

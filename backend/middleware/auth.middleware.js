@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const userRepository = require("../repositories/user.repository");
+const { createDefaultAvatar } = require("../utils/avatar");
 
 const auth = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -24,6 +25,7 @@ const auth = async (req, res, next) => {
       id: user._id.toString(),
       name: user.name,
       email: user.email,
+      avatar: user.avatar || createDefaultAvatar(user.name),
     };
 
     next();

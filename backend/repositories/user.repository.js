@@ -25,6 +25,9 @@ const findByEmailAndOtp = (email, otp) =>
     otpExpire: { $gt: Date.now() },
   });
 
+const updateById = (id, update) =>
+  User.findByIdAndUpdate(id, update, { new: true });
+
 module.exports = {
   findByEmail,
   findById,
@@ -32,4 +35,5 @@ module.exports = {
   findMany,
   findByResetPasswordToken,
   findByEmailAndOtp,
+  updateById,
 };
