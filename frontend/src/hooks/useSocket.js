@@ -20,7 +20,9 @@ const useSocket = ({ userId, onMessage } = {}) => {
     try {
       socket = io(SOCKET_URL, {
         autoConnect: true,
-        transports: ["websocket", "polling"],
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        timeout: 20000,
       });
 
       socket.on("connect", () => {
@@ -38,6 +40,13 @@ const useSocket = ({ userId, onMessage } = {}) => {
         setIsConnected(false);
       });
 
+      socket.on("reconnect", () => {
+        setIsConnected(true);
+        if (userId) {
+          socket.emit("join", userId);
+        }
+      });
+
       socket.on("receive-message", (message) => {
         if (onMessage) {
           onMessage(message);
@@ -53,8 +62,14 @@ const useSocket = ({ userId, onMessage } = {}) => {
 
     return () => {
       if (socket) {
+        socket.off("connect");
+        socket.off("disconnect");
+        socket.off("connect_error");
+        socket.off("reconnect");
+        socket.off("receive-message");
         socket.off("online-users");
         socket.disconnect();
+        socket = undefined;
       }
     };
   }, []);

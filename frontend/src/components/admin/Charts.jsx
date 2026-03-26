@@ -23,7 +23,7 @@ export default function Charts({ loginActivity = [] }) {
       : [{ label: "—", logins: 0 }];
 
   return (
-    <div className="rounded-2xl border border-violet-500/20 bg-slate-900/50 p-5 backdrop-blur-sm">
+    <div className="min-w-0 rounded-2xl border border-violet-500/20 bg-slate-900/50 p-5 backdrop-blur-sm">
       <div className="mb-4 flex items-center justify-between gap-2">
         <h2 className="font-display text-lg font-semibold text-white">
           Logins by day
@@ -32,8 +32,8 @@ export default function Charts({ loginActivity = [] }) {
           Last 7 days (UTC)
         </span>
       </div>
-      <div className="h-64 w-full">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-64 min-h-[16rem] w-full min-w-0">
+        <ResponsiveContainer width="100%" height="100%" minWidth={0}>
           <AreaChart
             data={data}
             margin={{ top: 8, right: 8, left: -18, bottom: 0 }}

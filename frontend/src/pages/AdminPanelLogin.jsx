@@ -11,7 +11,7 @@ const AdminPanelLogin = () => {
   const { adminPanelLogin } = useAuth();
 
   const [username, setUsername] = useState("admin_koushik");
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState("admin@123");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -30,7 +30,10 @@ const AdminPanelLogin = () => {
     setError("");
     setSubmitting(true);
     try {
-      await adminPanelLogin({ username, password });
+      await adminPanelLogin({
+        username: username.trim(),
+        password: password.trim(),
+      });
       navigate("/admin", { replace: true });
     } catch (err) {
       setError(
@@ -65,6 +68,9 @@ const AdminPanelLogin = () => {
         </h1>
         <p className="mt-1 text-sm text-slate-400">
           This page is not linked from the public app.
+        </p>
+        <p className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
+          Default admin credentials for this project: <span className="font-semibold text-white">admin_koushik</span> / <span className="font-semibold text-white">admin@123</span>
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
