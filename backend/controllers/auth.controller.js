@@ -54,13 +54,13 @@ const googleLogin = asyncHandler(async (req, res) => {
 });
 
 const adminPanelLogin = asyncHandler(async (req, res) => {
-  const { email, userId, password } = req.body;
+  const { username, password } = req.body;
 
-  if (!password) {
-    return res.status(400).json(new ApiResponse(400, "Master password is required"));
+  if (!username || !password) {
+    return res.status(400).json(new ApiResponse(400, "Username and password are required"));
   }
 
-  const result = await adminPanelLoginService({ email, userId, password });
+  const result = await adminPanelLoginService({ username, password });
 
   res.status(200).json(
     new ApiResponse(200, "Admin login successful", result)

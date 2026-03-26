@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 
+const allowedOrigins = require("./config/allowedOrigins");
 const errorHandler = require("./middleware/error.middleware");
 const adminRoutes = require("./routes/adminRoutes");
 const authRoutes = require("./routes/authRoutes");
@@ -15,13 +16,9 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
-const allowedOrigin =
-  process.env.CLIENT_URL ||
-  "https://chat-application-realtime-ruddy.vercel.app";
-
 app.use(
   cors({
-    origin: allowedOrigin,
+    origin: allowedOrigins,
     credentials: true,
   })
 );

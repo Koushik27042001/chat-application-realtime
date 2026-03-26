@@ -4,19 +4,16 @@ const http = require("http");
 const { Server } = require("socket.io");
 
 const app = require("./app");
+const allowedOrigins = require("./config/allowedOrigins");
 const connectDB = require("./config/db");
 const { initFirebaseAdmin } = require("./firebaseAdmin");
 const initializeSocket = require("./socket/socket");
-
-const allowedOrigin =
-  process.env.CLIENT_URL ||
-  "https://chat-application-realtime-ruddy.vercel.app";
 
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigin,
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -70,7 +67,7 @@ const startServer = async () => {
     await connectDB();
 
     const activePort = await listenOnPort(PORT);
-    console.log(`🚀 Server running on port ${activePort}`);
+    console.log(`Server running on port ${activePort}`);
   } catch (error) {
     console.error("Server failed:", error.message);
     process.exit(1);

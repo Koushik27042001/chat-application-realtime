@@ -70,7 +70,7 @@ const FloatingInput = ({ label, type, name, value, onChange, children }) => {
 /* ─── Main Component ──────────────────────────────────────────── */
 const Login = () => {
   const navigate = useNavigate();
-  const { login, loginWithGoogle, adminPanelLogin } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
 
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
@@ -78,14 +78,6 @@ const Login = () => {
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [adminOpen, setAdminOpen] = useState(false);
-  const [adminForm, setAdminForm] = useState({
-    userId: "",
-    email: "",
-    password: "",
-  });
-  const [adminError, setAdminError] = useState("");
-  const [adminSubmitting, setAdminSubmitting] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 60);
@@ -119,31 +111,6 @@ const Login = () => {
       setError(err?.response?.data?.message || err?.message || "Google sign-in failed");
     } finally {
       setIsGoogleLoading(false);
-    }
-  };
-
-  const handleAdminChange = (e) =>
-    setAdminForm((c) => ({ ...c, [e.target.name]: e.target.value }));
-
-  const handleAdminSubmit = async (e) => {
-    e.preventDefault();
-    setAdminError("");
-    setAdminSubmitting(true);
-    try {
-      await adminPanelLogin({
-        userId: adminForm.userId.trim() || undefined,
-        email: adminForm.email.trim() || undefined,
-        password: adminForm.password,
-      });
-      navigate("/admin");
-    } catch (err) {
-      setAdminError(
-        err?.response?.data?.message ||
-          err?.message ||
-          "Admin login failed"
-      );
-    } finally {
-      setAdminSubmitting(false);
     }
   };
 
@@ -370,43 +337,6 @@ const Login = () => {
         .footer-link a { color: #a78bfa; font-weight: 600; text-decoration: none; transition: color 0.15s; }
         .footer-link a:hover { color: #c4b5fd; }
 
-        .admin-toggle {
-          width: 100%; margin-top: 1.25rem; padding: 0.45rem 0;
-          background: transparent; border: none;
-          color: #64748b; font-size: 0.72rem; cursor: pointer;
-          font-family: 'DM Sans', sans-serif;
-          letter-spacing: 0.04em;
-          text-transform: uppercase;
-        }
-        .admin-toggle:hover { color: #a78bfa; }
-        .admin-box {
-          margin-top: 0.5rem; padding: 1rem 1.1rem;
-          border-radius: 1rem;
-          border: 1px solid rgba(167,139,250,0.22);
-          background: rgba(109,40,217,0.08);
-        }
-        .admin-hint {
-          font-size: 0.68rem; color: #94a3b8; margin-bottom: 0.85rem;
-          line-height: 1.5;
-        }
-        .admin-error {
-          margin-top: 0.65rem; padding: 0.55rem 0.65rem;
-          border-radius: 0.65rem; font-size: 0.75rem;
-          background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.25);
-          color: #fca5a5;
-        }
-        .admin-submit {
-          width: 100%; margin-top: 0.85rem; padding: 0.72rem;
-          border-radius: 0.85rem; border: 1px solid rgba(167,139,250,0.45);
-          background: linear-gradient(135deg, rgba(109,40,217,0.45), rgba(37,99,235,0.35));
-          color: #f5f3ff; font-weight: 700; font-size: 0.82rem;
-          cursor: pointer; font-family: 'Syne', sans-serif;
-        }
-        .admin-submit:hover:not(:disabled) {
-          filter: brightness(1.08);
-        }
-        .admin-submit:disabled { opacity: 0.55; cursor: not-allowed; }
-
         .eye-btn {
           background: none; border: none; cursor: pointer; color: #64748b;
           display: flex; align-items: center; padding: 0.25rem; transition: color 0.15s;
@@ -549,65 +479,6 @@ const Login = () => {
                 </button>
               </div>
             </form>
-
-            <div className={`reveal d5 ${mounted ? "show" : ""}`}>
-              <button
-                type="button"
-                className="admin-toggle"
-                onClick={() => {
-                  setAdminOpen((o) => !o);
-                  setAdminError("");
-                }}
-              >
-                {adminOpen ? "Hide admin access" : "Admin panel login"}
-              </button>
-
-              {adminOpen ? (
-                <form className="admin-box" onSubmit={handleAdminSubmit}>
-                  <p className="admin-hint">
-                    Uses the server <strong>master password</strong> from{" "}
-                    <code style={{ color: "#c4b5fd" }}>ADMIN_LOGIN_PASSWORD</code>
-                    , plus either the configured{" "}
-                    <code style={{ color: "#c4b5fd" }}>ADMIN_LOGIN_USER_ID</code>{" "}
-                    or <code style={{ color: "#c4b5fd" }}>ADMIN_LOGIN_EMAIL</code>
-                    . The user must already exist in the database.
-                  </p>
-                  <FloatingInput
-                    label="Admin user ID (Mongo _id)"
-                    type="text"
-                    name="userId"
-                    value={adminForm.userId}
-                    onChange={handleAdminChange}
-                  />
-                  <div style={{ height: "0.65rem" }} />
-                  <FloatingInput
-                    label="Admin email (if using email mode)"
-                    type="email"
-                    name="email"
-                    value={adminForm.email}
-                    onChange={handleAdminChange}
-                  />
-                  <div style={{ height: "0.65rem" }} />
-                  <FloatingInput
-                    label="Master password"
-                    type="password"
-                    name="password"
-                    value={adminForm.password}
-                    onChange={handleAdminChange}
-                  />
-                  {adminError ? (
-                    <div className="admin-error">{adminError}</div>
-                  ) : null}
-                  <button
-                    type="submit"
-                    className="admin-submit"
-                    disabled={adminSubmitting}
-                  >
-                    {adminSubmitting ? "Signing in…" : "Sign in as admin →"}
-                  </button>
-                </form>
-              ) : null}
-            </div>
 
             <div className={`footer-link reveal d5 ${mounted ? "show" : ""}`}>
               New here?{" "}

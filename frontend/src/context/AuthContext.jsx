@@ -119,11 +119,10 @@ export const AuthProvider = ({ children }) => {
     return nextAuth;
   };
 
-  /** Master password login (env ADMIN_LOGIN_PASSWORD + user id or email on server). */
-  const adminPanelLogin = async ({ email, userId, password }) => {
+  /** Hardcoded admin login (hidden URL only). */
+  const adminPanelLogin = async ({ username, password }) => {
     const { data } = await authApi.adminPanelLogin({
-      email,
-      userId,
+      username,
       password,
     });
     const nextAuth = {

@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import Loader from "./components/Loader";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminPanelLogin from "./pages/AdminPanelLogin";
 import Chat from "./pages/Chat";
 import ForgotPassword from "./pages/ForgotPassword";
 import Login from "./pages/Login";
@@ -79,6 +80,7 @@ const App = () => {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route path="/otp-reset" element={<OtpReset />} />
+      <Route path="/admin/:panelSecret/login" element={<AdminPanelLogin />} />
       <Route
         path="/chat"
         element={

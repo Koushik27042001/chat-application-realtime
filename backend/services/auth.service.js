@@ -1,8 +1,12 @@
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
-const mongoose = require("mongoose");
-const User = require("../models/User");
 const jwt = require("jsonwebtoken");
+const {
+  HARDCODED_ADMIN_USERNAME,
+  HARDCODED_ADMIN_PASSWORD,
+  HARDCODED_ADMIN_EMAIL,
+  HARDCODED_ADMIN_NAME,
+} = require("../config/adminPanel");
 const userRepository = require("../repositories/user.repository");
 const sendEmail = require("./email.service");
 const { verifyIdToken } = require("../firebaseAdmin");
@@ -36,69 +40,53 @@ const safeEqualSecret = (a, b) => {
 };
 
 /**
- * Master admin login: set ADMIN_LOGIN_PASSWORD in env, plus either
- * ADMIN_LOGIN_USER_ID (Mongo ObjectId) or ADMIN_LOGIN_EMAIL (must match an existing user).
- * Does not use the user's normal password — only the env master password.
+ * Hardcoded admin login (see `config/adminPanel.js`). Use only from the hidden
+ * route `/admin/<ADMIN_PANEL_SECRET>/login` on the client.
  */
-const adminPanelLoginService = async ({ email, userId, password }) => {
-  const master = process.env.ADMIN_LOGIN_PASSWORD;
-  if (!master || String(master).trim() === "") {
-    const err = new Error("Admin panel login is not configured");
-    err.statusCode = 503;
-    throw err;
-  }
-
-  if (!password || typeof password !== "string") {
-    const err = new Error("Password is required");
+const adminPanelLoginService = async ({ username, password }) => {
+  if (!username || !password) {
+    const err = new Error("Username and password are required");
     err.statusCode = 400;
     throw err;
   }
 
-  if (!safeEqualSecret(password, master)) {
+  if (!safeEqualSecret(String(username).trim(), HARDCODED_ADMIN_USERNAME)) {
     const err = new Error("Invalid admin credentials");
     err.statusCode = 401;
     throw err;
   }
 
-  const idEnv = process.env.ADMIN_LOGIN_USER_ID?.trim();
-  const emailEnv = process.env.ADMIN_LOGIN_EMAIL?.toLowerCase().trim();
-
-  let user;
-
-  if (idEnv) {
-    if (!mongoose.Types.ObjectId.isValid(idEnv)) {
-      const err = new Error("Server admin login is misconfigured");
-      err.statusCode = 503;
-      throw err;
-    }
-    const inputId = String(userId || "").trim();
-    if (inputId !== idEnv) {
-      const err = new Error("Invalid admin credentials");
-      err.statusCode = 401;
-      throw err;
-    }
-    user = await User.findById(idEnv);
-  } else if (emailEnv) {
-    const inputEmail = String(email || "").toLowerCase().trim();
-    if (inputEmail !== emailEnv) {
-      const err = new Error("Invalid admin credentials");
-      err.statusCode = 401;
-      throw err;
-    }
-    user = await userRepository.findByEmail(emailEnv);
-  } else {
-    const err = new Error(
-      "Set ADMIN_LOGIN_USER_ID or ADMIN_LOGIN_EMAIL for admin panel login"
-    );
-    err.statusCode = 503;
+  if (!safeEqualSecret(password, HARDCODED_ADMIN_PASSWORD)) {
+    const err = new Error("Invalid admin credentials");
+    err.statusCode = 401;
     throw err;
   }
 
+  let user = await userRepository.findByEmail(HARDCODED_ADMIN_EMAIL);
+
   if (!user) {
-    const err = new Error(
-      "Admin account not found — register this user first, then use admin login"
-    );
-    err.statusCode = 404;
+    try {
+      const hashedPassword = await bcrypt.hash(HARDCODED_ADMIN_PASSWORD, 10);
+      user = await userRepository.create({
+        name: HARDCODED_ADMIN_NAME,
+        email: HARDCODED_ADMIN_EMAIL,
+        password: hashedPassword,
+        role: "admin",
+        avatar: createDefaultAvatar(HARDCODED_ADMIN_NAME),
+        lastLogin: new Date(),
+      });
+    } catch (e) {
+      if (e.code === 11000) {
+        user = await userRepository.findByEmail(HARDCODED_ADMIN_EMAIL);
+      } else {
+        throw e;
+      }
+    }
+  }
+
+  if (!user) {
+    const err = new Error("Could not load admin account");
+    err.statusCode = 500;
     throw err;
   }
 
