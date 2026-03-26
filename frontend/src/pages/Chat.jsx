@@ -43,6 +43,39 @@ const normalizeMessage = (msg, currentUserId) => {
   };
 };
 
+const normalizeContact = (contact = {}) => ({
+  id: String(contact.id || contact._id || ""),
+  name: contact.name || "Unknown user",
+  email: contact.email || "",
+  avatar: contact.avatar || "",
+  conversationId: contact.conversationId || null,
+  lastMessage: contact.lastMessage || "Tap to start chatting.",
+  lastMessageAt: contact.lastMessageAt || null,
+});
+
+const upsertContact = (list, contact, { prepend = false } = {}) => {
+  const nextContact = normalizeContact(contact);
+  const existingIndex = list.findIndex((item) => item.id === nextContact.id);
+
+  if (existingIndex === -1) {
+    return prepend ? [nextContact, ...list] : [...list, nextContact];
+  }
+
+  const next = [...list];
+  next[existingIndex] = {
+    ...next[existingIndex],
+    ...nextContact,
+  };
+
+  if (!prepend) {
+    return next;
+  }
+
+  const [moved] = next.splice(existingIndex, 1);
+  next.unshift(moved);
+  return next;
+};
+
 /* ─── avatar initials ─────────────────────────────────────────── */
 const Avatar = ({ name = "?", size = 36, online = false, src }) => {
   const [imgError, setImgError] = useState(false);
@@ -408,6 +441,8 @@ export default function Chat() {
   const [contacts, setContacts] = useState([]);
   const [messages, setMessages] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [directoryResults, setDirectoryResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [activeChatId, setActiveChatId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer
   const [mounted, setMounted] = useState(false);
@@ -417,6 +452,8 @@ export default function Chat() {
   const messagesEndRef = useRef(null);
   const avatarInputRef = useRef(null);
 
+  const searchQuery = searchTerm.trim();
+
   /* auto-scroll */
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -424,16 +461,42 @@ export default function Chat() {
 
   useEffect(() => { setTimeout(() => setMounted(true), 60); }, []);
 
-  /* ── socket ── */
-  const handleIncomingMessage = (message) => {
-    const senderId = message.sender?.toString?.() ?? message.sender;
-    setContacts((cur) =>
-      cur.map((c) =>
-        c.id === senderId
-          ? { ...c, conversationId: message.conversationId || c.conversationId, lastMessage: message.content }
-          : c
-      )
-    );
+  const handleSelectContact = (contact) => {
+    const normalized = normalizeContact(contact);
+    if (!normalized.id) return;
+
+    setContacts((cur) => upsertContact(cur, normalized));
+    setActiveChatId(normalized.id);
+    setSidebarOpen(false);
+    if (searchQuery) {
+      setSearchTerm("");
+      setDirectoryResults([]);
+    }
+  };
+
+  /* socket */
+  const handleIncomingMessage = async (message) => {
+    const senderId = String(message.sender?.toString?.() ?? message.sender ?? "");
+    let incomingContact = contactsRef.current.find((contact) => contact.id === senderId);
+
+    if (!incomingContact && token && senderId) {
+      try {
+        const { data } = await userApi.get(token, senderId);
+        incomingContact = normalizeContact(data);
+      } catch {
+        incomingContact = normalizeContact({ id: senderId, name: "Unknown user" });
+      }
+    }
+
+    if (incomingContact) {
+      setContacts((cur) => upsertContact(cur, {
+        ...incomingContact,
+        conversationId: message.conversationId || incomingContact.conversationId,
+        lastMessage: message.content,
+        lastMessageAt: message.createdAt || new Date().toISOString(),
+      }, { prepend: true }));
+    }
+
     if (activeChatIdRef.current === senderId) {
       setMessages((cur) => [...cur, normalizeMessage(message, user?.id)]);
     }
@@ -444,20 +507,55 @@ export default function Chat() {
   useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
   useEffect(() => { contactsRef.current = contacts; }, [contacts]);
 
-  /* ── load users ── */
   useEffect(() => {
     if (!token) return;
-    userApi.list(token).then(({ data }) => {
-      const next = data.map((c) => ({
-        id: c.id, name: c.name, email: c.email, avatar: c.avatar,
-        conversationId: null, lastMessage: "Tap to start chatting.",
-      }));
-      setContacts(next);
-      if (!activeChatId && next.length) setActiveChatId(next[0].id);
-    }).catch(() => setContacts([]));
+
+    conversationApi.list(token)
+      .then(({ data }) => {
+        const next = data.map(normalizeContact);
+        setContacts(next);
+        if (!activeChatIdRef.current && next.length) {
+          setActiveChatId(next[0].id);
+        }
+      })
+      .catch(() => setContacts([]));
   }, [token]);
 
-  /* ── load messages ── */
+  useEffect(() => {
+    if (!token) return undefined;
+    if (!searchQuery) {
+      setDirectoryResults([]);
+      setIsSearching(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setIsSearching(true);
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        const { data } = await userApi.list(token, searchQuery);
+        if (!cancelled) {
+          setDirectoryResults(data.map(normalizeContact));
+        }
+      } catch {
+        if (!cancelled) {
+          setDirectoryResults([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsSearching(false);
+        }
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [token, searchQuery]);
+
+  /* load messages */
   useEffect(() => {
     if (!token || !activeChatId) { setMessages([]); return; }
     const ac = contactsRef.current.find((c) => c.id === activeChatId);
@@ -476,18 +574,22 @@ export default function Chat() {
         const norm = data.map((m) => normalizeMessage(m, user?.id));
         setMessages(norm);
         const last = norm[norm.length - 1];
-        if (last) setContacts((cur) => cur.map((c) => c.id === activeChatId ? { ...c, lastMessage: last.text } : c));
+        if (last) {
+          setContacts((cur) => cur.map((c) => c.id === activeChatId ? { ...c, lastMessage: last.text } : c));
+        }
       } catch { setMessages([]); }
     })();
   }, [token, activeChatId, user?.id]);
 
   const filteredContacts = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return contacts;
-    return contacts.filter((c) =>
-      `${c.name} ${c.email || ""} ${c.lastMessage}`.toLowerCase().includes(q)
-    );
-  }, [contacts, searchTerm]);
+    if (!searchQuery) return contacts;
+
+    const contactMap = new Map(contacts.map((contact) => [contact.id, contact]));
+    return directoryResults.map((result) => ({
+      ...result,
+      ...(contactMap.get(result.id) || {}),
+    }));
+  }, [contacts, directoryResults, searchQuery]);
 
   const onlineSet = useMemo(
     () => new Set((onlineUsers || []).map((id) => String(id))),
@@ -505,11 +607,12 @@ export default function Chat() {
       const { data } = await messageApi.send(token, { receiverId: activeContact.id, content: text });
       const norm = normalizeMessage(data.message, user?.id);
       setMessages((cur) => [...cur, norm]);
-      setContacts((cur) => cur.map((c) =>
-        c.id === activeContact.id
-          ? { ...c, lastMessage: norm.text, conversationId: data.conversation?._id || c.conversationId }
-          : c
-      ));
+      setContacts((cur) => upsertContact(cur, {
+        ...activeContact,
+        lastMessage: norm.text,
+        conversationId: data.conversation?._id || activeContact.conversationId || null,
+        lastMessageAt: data.message?.createdAt || new Date().toISOString(),
+      }, { prepend: true }));
       if (socket) socket.emit("private-message", { receiverId: activeContact.id, message: data.message });
     } catch {}
   };
@@ -817,12 +920,18 @@ export default function Chat() {
             <SearchBar value={searchTerm} onChange={setSearchTerm} />
           </div>
 
-          <p className="section-label">Messages</p>
+          <p className="section-label">{searchQuery ? "Search results" : "Chats"}</p>
 
           <div className="contact-list">
-            {filteredContacts.length === 0 ? (
-              <p style={{ textAlign: "center", color: "#475569", fontSize: "0.78rem", marginTop: "2rem" }}>
-                No contacts found
+            {isSearching ? (
+              <p style={{ textAlign: "center", color: "#94a3b8", fontSize: "0.78rem", marginTop: "2rem" }}>
+                Searching users...
+              </p>
+            ) : filteredContacts.length === 0 ? (
+              <p style={{ textAlign: "center", color: "#475569", fontSize: "0.78rem", marginTop: "2rem", lineHeight: 1.6 }}>
+                {searchQuery
+                  ? "No registered user matched that name or user ID."
+                  : "No chats yet. Search by name or user ID to start a conversation."}
               </p>
             ) : filteredContacts.map((c) => (
               <ContactRow
@@ -830,7 +939,7 @@ export default function Chat() {
                 contact={c}
                 active={c.id === activeContact?.id}
                 online={onlineSet.has(String(c.id))}
-                onClick={(contact) => { setActiveChatId(contact.id); setSidebarOpen(false); }}
+                onClick={handleSelectContact}
               />
             ))}
           </div>

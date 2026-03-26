@@ -12,6 +12,12 @@ const findByParticipantsSelect = (participantIds, projection) =>
   Conversation.findOne({ participants: { $all: participantIds } })
     .select(projection);
 
+const findManyByParticipant = (userId) =>
+  Conversation.find({ participants: userId })
+    .populate("participants", "_id name email avatar")
+    .sort({ lastMessageAt: -1 })
+    .lean();
+
 const save = (conversation) => conversation.save();
 
 module.exports = {
@@ -19,5 +25,6 @@ module.exports = {
   create,
   findById,
   findByParticipantsSelect,
+  findManyByParticipant,
   save,
 };

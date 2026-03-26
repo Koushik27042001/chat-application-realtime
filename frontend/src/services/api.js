@@ -47,6 +47,7 @@ export const messageApi = {
 };
 
 export const conversationApi = {
+  list: (token) => apiClient.get("/conversations", createAuthConfig(token)),
   withUser: (token, userId) =>
     apiClient.get(`/conversations/with/${userId}`, createAuthConfig(token)),
 };
