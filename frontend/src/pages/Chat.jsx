@@ -9,6 +9,25 @@ import { useAuth } from "../context/AuthContext";
 import useSocket from "../hooks/useSocket";
 import { conversationApi, messageApi, userApi } from "../services/api";
 
+const EMOJI_GROUPS = [
+  {
+    label: "Smileys",
+    items: ["\u{1F600}", "\u{1F602}", "\u{1F60A}", "\u{1F60D}", "\u{1F973}", "\u{1F60E}", "\u{1F914}", "\u{1F62D}", "\u{1F634}", "\u{1F917}"],
+  },
+  {
+    label: "Gestures",
+    items: ["\u{1F44B}", "\u{1F44D}", "\u{1F44F}", "\u{1F64C}", "\u{1F64F}", "\u{1F4AA}", "\u{1F44C}", "\u{1F91D}", "\u{270C}\u{FE0F}", "\u{1F91E}"],
+  },
+  {
+    label: "Hearts",
+    items: ["\u{2764}\u{FE0F}", "\u{1F9E1}", "\u{1F49B}", "\u{1F49A}", "\u{1F499}", "\u{1F49C}", "\u{1F90D}", "\u{1F5A4}", "\u{1F496}", "\u{1F4AF}"],
+  },
+  {
+    label: "Chat",
+    items: ["\u{1F525}", "\u{2728}", "\u{1F389}", "\u{1F4AC}", "\u{1F680}", "\u{1F4CC}", "\u{1F3B6}", "\u{2615}", "\u{1F308}", "\u{1F3AF}"],
+  },
+];
+
 /* ─── helpers ─────────────────────────────────────────────────── */
 const formatTime = (v) =>
   new Date(v).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -144,21 +163,80 @@ const Bubble = ({ message }) => (
 /* ─── inline message input ────────────────────────────────────── */
 const InlineInput = ({ onSend }) => {
   const [text, setText] = useState("");
-  const handleKey = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } };
-  const submit = () => { if (text.trim()) { onSend(text.trim()); setText(""); } };
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const textareaRef = useRef(null);
+  const pickerRef = useRef(null);
+  const triggerRef = useRef(null);
+
+  useEffect(() => {
+    if (!showEmojiPicker) return undefined;
+
+    const handlePointerDown = (event) => {
+      const target = event.target;
+      if (
+        pickerRef.current?.contains(target) ||
+        triggerRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setShowEmojiPicker(false);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [showEmojiPicker]);
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    }
+  };
+
+  const submit = () => {
+    if (text.trim()) {
+      onSend(text.trim());
+      setText("");
+      setShowEmojiPicker(false);
+    }
+  };
+
+  const insertEmoji = (emoji) => {
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      setText((current) => `${current}${emoji}`);
+      return;
+    }
+
+    const start = textarea.selectionStart ?? text.length;
+    const end = textarea.selectionEnd ?? text.length;
+    const nextText = `${text.slice(0, start)}${emoji}${text.slice(end)}`;
+    const nextCaret = start + emoji.length;
+
+    setText(nextText);
+    setShowEmojiPicker(false);
+
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextCaret, nextCaret);
+    });
+  };
 
   return (
     <div style={{
+      position: "relative",
       padding: "0.85rem 1rem", display: "flex", gap: "0.65rem", alignItems: "flex-end",
       borderTop: "1px solid rgba(255,255,255,0.06)",
       background: "rgba(10,12,24,0.6)", backdropFilter: "blur(16px)",
     }}>
       <textarea
+        ref={textareaRef}
         rows={1}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKey}
-        placeholder="Type a message…"
+        placeholder="Type a message..."
         style={{
           flex: 1, resize: "none", background: "rgba(255,255,255,0.05)",
           border: "1.5px solid rgba(255,255,255,0.1)", borderRadius: "0.85rem",
@@ -170,16 +248,27 @@ const InlineInput = ({ onSend }) => {
         onFocus={e => { e.target.style.borderColor = "#8b5cf6"; e.target.style.boxShadow = "0 0 0 3px rgba(139,92,246,0.15)"; }}
         onBlur={e => { e.target.style.borderColor = "rgba(255,255,255,0.1)"; e.target.style.boxShadow = "none"; }}
       />
-      {/* emoji btn placeholder */}
-      <button type="button" style={{
-        width: 42, height: 42, borderRadius: "0.75rem", border: "1px solid rgba(255,255,255,0.1)",
-        background: "rgba(255,255,255,0.05)", color: "#94a3b8", fontSize: "1.1rem",
-        cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-        flexShrink: 0, transition: "background 0.15s",
-      }}
-        onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
-        onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-      >😊</button>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label="Open emoji picker"
+        aria-expanded={showEmojiPicker}
+        onClick={() => setShowEmojiPicker((current) => !current)}
+        style={{
+          width: 42, height: 42, borderRadius: "0.75rem", border: "1px solid rgba(255,255,255,0.1)",
+          background: showEmojiPicker ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.05)",
+          color: showEmojiPicker ? "#c4b5fd" : "#94a3b8", fontSize: "1.1rem",
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0, transition: "background 0.15s, border-color 0.15s, color 0.15s",
+          borderColor: showEmojiPicker ? "rgba(139,92,246,0.45)" : "rgba(255,255,255,0.1)",
+        }}
+        onMouseEnter={e => {
+          if (!showEmojiPicker) e.currentTarget.style.background = "rgba(255,255,255,0.1)";
+        }}
+        onMouseLeave={e => {
+          if (!showEmojiPicker) e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+        }}
+      >{"\u{1F60A}"}</button>
       <button
         onClick={submit}
         type="button"
@@ -198,11 +287,92 @@ const InlineInput = ({ onSend }) => {
           <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
         </svg>
       </button>
+
+      {showEmojiPicker && (
+        <div
+          ref={pickerRef}
+          style={{
+            position: "absolute",
+            right: "1rem",
+            bottom: "calc(100% + 0.6rem)",
+            width: "min(320px, calc(100vw - 2rem))",
+            padding: "0.85rem",
+            borderRadius: "1rem",
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(8,10,20,0.96)",
+            backdropFilter: "blur(20px)",
+            boxShadow: "0 18px 50px rgba(0,0,0,0.45)",
+            zIndex: 30,
+          }}
+        >
+          <p style={{
+            fontFamily: "'Syne', sans-serif",
+            fontSize: "0.82rem",
+            color: "#e2e8f0",
+            marginBottom: "0.2rem",
+          }}>
+            Add emoji
+          </p>
+          <p style={{
+            fontSize: "0.7rem",
+            color: "#64748b",
+            marginBottom: "0.75rem",
+          }}>
+            Pick one to insert it at your cursor.
+          </p>
+          {EMOJI_GROUPS.map((group) => (
+            <div key={group.label} style={{ marginTop: "0.7rem" }}>
+              <p style={{
+                fontSize: "0.68rem",
+                color: "#94a3b8",
+                marginBottom: "0.45rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+              }}>
+                {group.label}
+              </p>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+                gap: "0.45rem",
+              }}>
+                {group.items.map((emoji) => (
+                  <button
+                    key={`${group.label}-${emoji}`}
+                    type="button"
+                    onClick={() => insertEmoji(emoji)}
+                    style={{
+                      height: 42,
+                      borderRadius: "0.8rem",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "rgba(255,255,255,0.04)",
+                      fontSize: "1.15rem",
+                      cursor: "pointer",
+                      transition: "transform 0.15s, background 0.15s, border-color 0.15s",
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                      e.currentTarget.style.background = "rgba(139,92,246,0.14)";
+                      e.currentTarget.style.borderColor = "rgba(139,92,246,0.35)";
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = "translateY(0)";
+                      e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+                      e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+                    }}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
 
-/* ─── search bar ──────────────────────────────────────────────── */
 const SearchBar = ({ value, onChange }) => (
   <div style={{ position: "relative", margin: "0.75rem 0.85rem" }}>
     <svg style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}
