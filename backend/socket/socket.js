@@ -3,7 +3,7 @@ const Notification = require("../models/Notification");
 const onlineUsers = new Map();
 
 const emitToUser = (io, userId, event, payload) => {
-    const receiverSocketId = onlineUsers.get(userId);
+    const receiverSocketId = onlineUsers.get(String(userId));
     if (receiverSocketId) {
         io.to(receiverSocketId).emit(event, payload);
         return true;
@@ -37,15 +37,16 @@ const initializeSocket = (io) => {
         socket.on("join", (userId) => {
             if (!userId) return;
 
-            onlineUsers.set(userId, socket.id);
-            socket.data.userId = userId;
+            const normalizedUserId = String(userId);
+            onlineUsers.set(normalizedUserId, socket.id);
+            socket.data.userId = normalizedUserId;
 
             io.emit("online-users", Array.from(onlineUsers.keys()));
         });
 
         // ✅ SEND MESSAGE (REAL-TIME)
         socket.on("private-message", ({ receiverId, message }) => {
-            const receiverSocketId = onlineUsers.get(receiverId);
+            const receiverSocketId = onlineUsers.get(String(receiverId));
 
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit("receive-message", message);
@@ -77,7 +78,7 @@ const initializeSocket = (io) => {
 
         // ✅ TYPING INDICATOR (NEW 🔥)
         socket.on("typing", ({ receiverId }) => {
-            const receiverSocketId = onlineUsers.get(receiverId);
+            const receiverSocketId = onlineUsers.get(String(receiverId));
 
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit("typing");
@@ -85,7 +86,7 @@ const initializeSocket = (io) => {
         });
 
         socket.on("stop-typing", ({ receiverId }) => {
-            const receiverSocketId = onlineUsers.get(receiverId);
+            const receiverSocketId = onlineUsers.get(String(receiverId));
 
             if (receiverSocketId) {
                 io.to(receiverSocketId).emit("stop-typing");
@@ -95,47 +96,49 @@ const initializeSocket = (io) => {
         // ✅ CALL SIGNALING (WEBRTC)
         socket.on("call:offer", ({ to, offer, from, callType }) => {
             if (!to || !offer || !from) return;
-            const delivered = emitToUser(io, to, "call:incoming", {
-                from,
+            const toId = String(to);
+            const fromId = String(from);
+            const delivered = emitToUser(io, toId, "call:incoming", {
+                from: fromId,
                 offer,
                 callType: callType || "video",
             });
 
             if (!delivered) {
-                emitToUser(io, from, "call:unavailable", { to });
+                emitToUser(io, fromId, "call:unavailable", { to: toId });
             }
 
             createAndEmitNotification(io, {
-                userId: to,
+                userId: toId,
                 type: "CALL",
                 content: `Incoming ${callType === "audio" ? "audio" : "video"} call`,
-                meta: { from, callType: callType || "video" },
+                meta: { from: fromId, callType: callType || "video" },
             });
         });
 
         socket.on("call:answer", ({ to, answer, from }) => {
             if (!to || !answer || !from) return;
-            emitToUser(io, to, "call:accepted", { from, answer });
+            emitToUser(io, String(to), "call:accepted", { from: String(from), answer });
         });
 
         socket.on("call:decline", ({ to, from }) => {
             if (!to || !from) return;
-            emitToUser(io, to, "call:declined", { from });
+            emitToUser(io, String(to), "call:declined", { from: String(from) });
         });
 
         socket.on("call:hangup", ({ to, from }) => {
             if (!to || !from) return;
-            emitToUser(io, to, "call:ended", { from });
+            emitToUser(io, String(to), "call:ended", { from: String(from) });
         });
 
         socket.on("call:busy", ({ to, from }) => {
             if (!to || !from) return;
-            emitToUser(io, to, "call:busy", { from });
+            emitToUser(io, String(to), "call:busy", { from: String(from) });
         });
 
         socket.on("call:ice", ({ to, candidate, from }) => {
             if (!to || !candidate || !from) return;
-            emitToUser(io, to, "call:ice", { from, candidate });
+            emitToUser(io, String(to), "call:ice", { from: String(from), candidate });
         });
 
         // ✅ DISCONNECT

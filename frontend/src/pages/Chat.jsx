@@ -549,6 +549,15 @@ export default function Chat() {
   const handleCallAccepted = async ({ answer }) => {
     if (!peerRef.current || !answer) return;
     await peerRef.current.setRemoteDescription(answer);
+    if (pendingIceRef.current.length) {
+      const pending = [...pendingIceRef.current];
+      pendingIceRef.current = [];
+      for (const candidate of pending) {
+        try {
+          await peerRef.current.addIceCandidate(candidate);
+        } catch {}
+      }
+    }
     setCallStatus("active");
   };
 
@@ -574,7 +583,7 @@ export default function Chat() {
 
   const handleCallIce = async ({ candidate }) => {
     if (!candidate) return;
-    if (!peerRef.current) {
+    if (!peerRef.current || !peerRef.current.remoteDescription) {
       pendingIceRef.current.push(candidate);
       return;
     }
@@ -823,6 +832,14 @@ export default function Chat() {
 
   const startCall = async (type) => {
     if (!socket || !user?.id || !activeContact) return;
+    if (!isConnected) {
+      setCallNotice("Socket is offline. Reconnect and try again.");
+      return;
+    }
+    if (!onlineSet.has(String(activeContact.id))) {
+      setCallNotice("User is offline");
+      return;
+    }
     if (callStatus !== "idle") return;
 
     setCallNotice("");
@@ -853,6 +870,15 @@ export default function Chat() {
     try {
       const peer = await createPeer(callPeerId, callType);
       await peer.setRemoteDescription(incomingOffer);
+      if (pendingIceRef.current.length) {
+        const pending = [...pendingIceRef.current];
+        pendingIceRef.current = [];
+        for (const candidate of pending) {
+          try {
+            await peer.addIceCandidate(candidate);
+          } catch {}
+        }
+      }
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
       socket.emit("call:answer", { to: callPeerId, from: user.id, answer });
