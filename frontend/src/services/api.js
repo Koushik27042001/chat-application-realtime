@@ -57,6 +57,18 @@ export const adminApi = {
     apiClient.get("/admin/analytics", createAuthConfig(token)),
 };
 
+export const notificationApi = {
+  list: (token, page = 0, limit = 20) =>
+    apiClient.get(
+      `/notifications?page=${page}&limit=${limit}`,
+      createAuthConfig(token)
+    ),
+  markRead: (token, id) =>
+    apiClient.patch(`/notifications/${id}/read`, {}, createAuthConfig(token)),
+  markAllRead: (token) =>
+    apiClient.patch("/notifications/read-all", {}, createAuthConfig(token)),
+};
+
 export const userApi = {
   list: (token, search = "") => {
     const query = search ? `?search=${encodeURIComponent(search)}` : "";

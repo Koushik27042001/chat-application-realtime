@@ -7,7 +7,7 @@ import MessageInput from "../components/MessageInput";
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../context/AuthContext";
 import useSocket from "../hooks/useSocket";
-import { conversationApi, messageApi, userApi } from "../services/api";
+import { conversationApi, messageApi, notificationApi, userApi } from "../services/api";
 
 const EMOJI_GROUPS = [
   {
@@ -42,6 +42,15 @@ const normalizeMessage = (msg, currentUserId) => {
     time: formatTime(msg.createdAt || new Date()),
   };
 };
+
+const normalizeNotification = (notification = {}) => ({
+  id: notification._id || notification.id || `notif-${Date.now()}`,
+  type: notification.type || "SYSTEM",
+  content: notification.content || "",
+  meta: notification.meta || {},
+  isRead: notification.isRead ?? false,
+  createdAt: notification.createdAt || new Date().toISOString(),
+});
 
 const normalizeContact = (contact = {}) => ({
   id: String(contact.id || contact._id || ""),
@@ -446,10 +455,25 @@ export default function Chat() {
   const [activeChatId, setActiveChatId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer
   const [mounted, setMounted] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [callStatus, setCallStatus] = useState("idle"); // idle | incoming | outgoing | active
+  const [callType, setCallType] = useState("video"); // video | audio
+  const [callPeerId, setCallPeerId] = useState(null);
+  const [incomingOffer, setIncomingOffer] = useState(null);
+  const [callNotice, setCallNotice] = useState("");
 
   const activeChatIdRef = useRef(null);
   const contactsRef = useRef([]);
   const messagesEndRef = useRef(null);
+  const notificationPanelRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const peerRef = useRef(null);
+  const localStreamRef = useRef(null);
+  const pendingIceRef = useRef([]);
   const avatarInputRef = useRef(null);
 
   const searchQuery = searchTerm.trim();
@@ -502,7 +526,75 @@ export default function Chat() {
     }
   };
 
-  const { socket, isConnected, onlineUsers } = useSocket({ userId: user?.id, onMessage: handleIncomingMessage });
+  const handleIncomingNotification = (payload) => {
+    const normalized = normalizeNotification(payload);
+    setNotifications((cur) => [normalized, ...cur].slice(0, 50));
+    if (!normalized.isRead) {
+      setUnreadCount((count) => count + 1);
+    }
+  };
+
+  const handleIncomingCall = ({ from, offer, callType: incomingType }) => {
+    if (!socket || !from) return;
+    if (callStatus !== "idle") {
+      socket.emit("call:busy", { to: from, from: user?.id });
+      return;
+    }
+    setCallType(incomingType === "audio" ? "audio" : "video");
+    setCallPeerId(from);
+    setIncomingOffer(offer);
+    setCallStatus("incoming");
+  };
+
+  const handleCallAccepted = async ({ answer }) => {
+    if (!peerRef.current || !answer) return;
+    await peerRef.current.setRemoteDescription(answer);
+    setCallStatus("active");
+  };
+
+  const handleCallDeclined = () => {
+    setCallNotice("Call declined");
+    endCallCleanup();
+  };
+
+  const handleCallEnded = () => {
+    setCallNotice("Call ended");
+    endCallCleanup();
+  };
+
+  const handleCallBusy = () => {
+    setCallNotice("User is busy");
+    endCallCleanup();
+  };
+
+  const handleCallUnavailable = () => {
+    setCallNotice("User is offline");
+    endCallCleanup();
+  };
+
+  const handleCallIce = async ({ candidate }) => {
+    if (!candidate) return;
+    if (!peerRef.current) {
+      pendingIceRef.current.push(candidate);
+      return;
+    }
+    try {
+      await peerRef.current.addIceCandidate(candidate);
+    } catch {}
+  };
+
+  const { socket, isConnected, onlineUsers } = useSocket({
+    userId: user?.id,
+    onMessage: handleIncomingMessage,
+    onNotification: handleIncomingNotification,
+    onCallIncoming: handleIncomingCall,
+    onCallAccepted: handleCallAccepted,
+    onCallDeclined: handleCallDeclined,
+    onCallEnded: handleCallEnded,
+    onCallIce: handleCallIce,
+    onCallBusy: handleCallBusy,
+    onCallUnavailable: handleCallUnavailable,
+  });
 
   useEffect(() => { activeChatIdRef.current = activeChatId; }, [activeChatId]);
   useEffect(() => { contactsRef.current = contacts; }, [contacts]);
@@ -520,6 +612,53 @@ export default function Chat() {
       })
       .catch(() => setContacts([]));
   }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    setNotificationsLoading(true);
+    notificationApi.list(token, 0, 25)
+      .then(({ data }) => {
+        const items = (data?.items || []).map(normalizeNotification);
+        setNotifications(items);
+        if (typeof data?.unreadCount === "number") {
+          setUnreadCount(data.unreadCount);
+        } else {
+          setUnreadCount(items.filter((item) => !item.isRead).length);
+        }
+      })
+      .catch(() => {
+        setNotifications([]);
+        setUnreadCount(0);
+      })
+      .finally(() => setNotificationsLoading(false));
+  }, [token]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return undefined;
+
+    const handleOutside = (event) => {
+      if (!notificationPanelRef.current?.contains(event.target)) {
+        setNotificationsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [notificationsOpen]);
+
+  useEffect(() => {
+    if (!notificationsOpen || !token) return;
+    if (unreadCount === 0) return;
+    setUnreadCount(0);
+    setNotifications((cur) => cur.map((item) => ({ ...item, isRead: true })));
+    notificationApi.markAllRead(token).catch(() => {});
+  }, [notificationsOpen, token, unreadCount]);
+
+  useEffect(() => {
+    if (!callNotice) return undefined;
+    const timer = setTimeout(() => setCallNotice(""), 2400);
+    return () => clearTimeout(timer);
+  }, [callNotice]);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -600,6 +739,174 @@ export default function Chat() {
     filteredContacts.find((c) => c.id === activeChatId) ||
     contacts.find((c) => c.id === activeChatId) ||
     filteredContacts[0] || contacts[0];
+
+  const resolveContactName = (id) => {
+    const contact =
+      contactsRef.current.find((c) => c.id === String(id)) ||
+      filteredContacts.find((c) => c.id === String(id));
+    return contact?.name || "Unknown user";
+  };
+
+  const resetCallState = () => {
+    setCallStatus("idle");
+    setCallType("video");
+    setCallPeerId(null);
+    setIncomingOffer(null);
+    pendingIceRef.current = [];
+  };
+
+  const endCallCleanup = () => {
+    try {
+      if (peerRef.current) {
+        peerRef.current.ontrack = null;
+        peerRef.current.onicecandidate = null;
+        peerRef.current.close();
+        peerRef.current = null;
+      }
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
+        localStreamRef.current = null;
+      }
+      if (localVideoRef.current) localVideoRef.current.srcObject = null;
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    } finally {
+      resetCallState();
+    }
+  };
+
+  const createPeer = async (peerId, type) => {
+    const peer = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    });
+
+    peer.onicecandidate = (event) => {
+      if (event.candidate && socket) {
+        socket.emit("call:ice", {
+          to: peerId,
+          from: user?.id,
+          candidate: event.candidate,
+        });
+      }
+    };
+
+    peer.ontrack = (event) => {
+      const [stream] = event.streams || [];
+      if (stream && remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = stream;
+      }
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: type === "video",
+      audio: true,
+    });
+    localStreamRef.current = stream;
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = stream;
+    }
+    stream.getTracks().forEach((track) => peer.addTrack(track, stream));
+
+    peerRef.current = peer;
+
+    if (pendingIceRef.current.length) {
+      const pending = [...pendingIceRef.current];
+      pendingIceRef.current = [];
+      for (const candidate of pending) {
+        try {
+          await peer.addIceCandidate(candidate);
+        } catch {}
+      }
+    }
+
+    return peer;
+  };
+
+  const startCall = async (type) => {
+    if (!socket || !user?.id || !activeContact) return;
+    if (callStatus !== "idle") return;
+
+    setCallNotice("");
+    setCallType(type);
+    setCallPeerId(activeContact.id);
+    setCallStatus("outgoing");
+
+    try {
+      const peer = await createPeer(activeContact.id, type);
+      const offer = await peer.createOffer();
+      await peer.setLocalDescription(offer);
+      socket.emit("call:offer", {
+        to: activeContact.id,
+        from: user.id,
+        offer,
+        callType: type,
+      });
+    } catch (error) {
+      setCallNotice("Could not start the call");
+      endCallCleanup();
+    }
+  };
+
+  const acceptCall = async () => {
+    if (!socket || !user?.id || !callPeerId || !incomingOffer) return;
+    setCallNotice("");
+    setCallStatus("active");
+    try {
+      const peer = await createPeer(callPeerId, callType);
+      await peer.setRemoteDescription(incomingOffer);
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+      socket.emit("call:answer", { to: callPeerId, from: user.id, answer });
+    } catch (error) {
+      setCallNotice("Unable to join the call");
+      endCallCleanup();
+    }
+  };
+
+  const declineCall = () => {
+    if (socket && callPeerId && user?.id) {
+      socket.emit("call:decline", { to: callPeerId, from: user.id });
+    }
+    endCallCleanup();
+  };
+
+  const endCall = () => {
+    if (socket && callPeerId && user?.id) {
+      socket.emit("call:hangup", { to: callPeerId, from: user.id });
+    }
+    endCallCleanup();
+  };
+
+  const handleNotificationClick = async (notification) => {
+    if (!notification) return;
+    if (token && !notification.isRead) {
+      notificationApi.markRead(token, notification.id).catch(() => {});
+      setNotifications((cur) =>
+        cur.map((item) => (item.id === notification.id ? { ...item, isRead: true } : item))
+      );
+      setUnreadCount((count) => Math.max(0, count - 1));
+    }
+
+    if (notification.type === "MESSAGE" && notification.meta?.senderId) {
+      const senderId = String(notification.meta.senderId);
+      let contact = contactsRef.current.find((c) => c.id === senderId);
+
+      if (!contact && token) {
+        try {
+          const { data } = await userApi.get(token, senderId);
+          contact = normalizeContact(data);
+        } catch {
+          contact = normalizeContact({ id: senderId, name: "Unknown user" });
+        }
+      }
+
+      if (contact) {
+        setContacts((cur) => upsertContact(cur, contact));
+        setActiveChatId(contact.id);
+      }
+    }
+
+    setNotificationsOpen(false);
+  };
 
   const handleSend = async (text) => {
     if (!token || !activeContact) return;
@@ -736,6 +1043,7 @@ export default function Chat() {
           flex-shrink: 0;
         }
         .topbar-left { display: flex; align-items: center; gap: 0.75rem; }
+        .topbar-right { display: flex; align-items: center; gap: 0.65rem; position: relative; }
         .mobile-menu-btn {
           display: none; width: 34px; height: 34px; border-radius: 0.6rem;
           background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
@@ -776,6 +1084,103 @@ export default function Chat() {
           background: rgba(239,68,68,0.1);
           border-color: rgba(239,68,68,0.25);
           color: #fca5a5;
+        }
+
+        /* notifications */
+        .notif-wrap { position: relative; }
+        .notif-btn {
+          position: relative;
+          width: 36px; height: 36px; border-radius: 0.75rem;
+          background: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.08);
+          color: #94a3b8; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          transition: all 0.18s;
+        }
+        .notif-btn.active,
+        .notif-btn:hover {
+          background: rgba(139,92,246,0.18);
+          color: #c4b5fd;
+          border-color: rgba(139,92,246,0.35);
+        }
+        .notif-badge {
+          position: absolute; top: -4px; right: -4px;
+          min-width: 18px; height: 18px;
+          padding: 0 5px;
+          border-radius: 999px;
+          background: #ef4444; color: #fff; font-size: 0.62rem;
+          font-weight: 700; display: flex; align-items: center; justify-content: center;
+          border: 2px solid #0d0f1a;
+        }
+        .notif-panel {
+          position: absolute; right: 0; top: calc(100% + 0.55rem);
+          width: min(360px, 92vw);
+          border-radius: 1rem;
+          background: rgba(8,10,20,0.96);
+          border: 1px solid rgba(255,255,255,0.08);
+          box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+          overflow: hidden;
+          z-index: 40;
+        }
+        .notif-panel-header {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 0.85rem 1rem;
+          border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .notif-title {
+          font-family: 'Syne', sans-serif;
+          font-weight: 700; font-size: 0.85rem; color: #e2e8f0;
+        }
+        .notif-sub { font-size: 0.68rem; color: #64748b; margin-top: 0.2rem; }
+        .notif-count {
+          font-size: 0.68rem; color: #cbd5e1;
+          padding: 0.2rem 0.5rem; border-radius: 999px;
+          background: rgba(255,255,255,0.06);
+        }
+        .notif-panel-body {
+          max-height: 300px; overflow-y: auto;
+          padding: 0.5rem;
+        }
+        .notif-panel-body::-webkit-scrollbar { width: 4px; }
+        .notif-panel-body::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.2); border-radius: 99px; }
+        .notif-item {
+          width: 100%; display: flex; gap: 0.65rem;
+          padding: 0.65rem 0.75rem;
+          border-radius: 0.8rem;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid transparent;
+          color: #e2e8f0; cursor: pointer;
+          text-align: left; position: relative;
+          transition: all 0.18s;
+        }
+        .notif-item + .notif-item { margin-top: 0.4rem; }
+        .notif-item.unread {
+          border-color: rgba(139,92,246,0.3);
+          background: rgba(139,92,246,0.1);
+        }
+        .notif-item:hover {
+          background: rgba(255,255,255,0.06);
+        }
+        .notif-icon {
+          width: 36px; height: 36px; border-radius: 0.75rem;
+          background: rgba(255,255,255,0.06);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 1rem;
+          flex-shrink: 0;
+        }
+        .notif-content { flex: 1; min-width: 0; }
+        .notif-label { font-size: 0.72rem; font-weight: 600; color: #e2e8f0; }
+        .notif-text {
+          margin-top: 0.2rem; font-size: 0.7rem; color: #94a3b8;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .notif-dot {
+          position: absolute; right: 0.6rem; top: 0.6rem;
+          width: 7px; height: 7px; border-radius: 50%;
+          background: #8b5cf6; box-shadow: 0 0 8px rgba(139,92,246,0.6);
+        }
+        .notif-empty {
+          text-align: center; color: #64748b; font-size: 0.75rem; padding: 1.5rem 0;
         }
 
         /* chat header */
@@ -884,6 +1289,95 @@ export default function Chat() {
           gap: 0.4rem;
           width: 100%;
           justify-content: flex-end;
+        }
+
+        /* call overlay */
+        .call-overlay {
+          position: fixed; inset: 0; z-index: 60;
+          background: radial-gradient(circle at top, rgba(79,70,229,0.18), rgba(15,23,42,0.96));
+          display: flex; align-items: center; justify-content: center;
+          padding: 1.5rem;
+        }
+        .call-card {
+          width: min(880px, 95vw);
+          background: rgba(8,10,20,0.92);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 1.5rem;
+          box-shadow: 0 28px 70px rgba(0,0,0,0.6);
+          padding: 1.25rem;
+        }
+        .call-header {
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 1rem;
+          margin-bottom: 1rem;
+        }
+        .call-header h3 {
+          font-family: 'Syne', sans-serif;
+          font-size: 1rem; color: #e2e8f0;
+        }
+        .call-pill {
+          padding: 0.35rem 0.8rem;
+          border-radius: 999px;
+          font-size: 0.7rem;
+          background: rgba(139,92,246,0.2);
+          color: #c4b5fd;
+        }
+        .call-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 0.75rem;
+        }
+        .call-video {
+          width: 100%; height: 260px;
+          border-radius: 1rem;
+          background: #0f172a;
+          border: 1px solid rgba(255,255,255,0.08);
+          object-fit: cover;
+        }
+        .call-placeholder {
+          width: 100%; height: 260px;
+          border-radius: 1rem;
+          background: rgba(255,255,255,0.04);
+          border: 1px dashed rgba(255,255,255,0.12);
+          display: flex; align-items: center; justify-content: center;
+          flex-direction: column;
+          color: #94a3b8;
+          font-size: 0.8rem;
+          gap: 0.4rem;
+        }
+        .call-controls {
+          margin-top: 1rem;
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+        .call-btn {
+          padding: 0.55rem 1.1rem;
+          border-radius: 0.75rem;
+          border: 1px solid rgba(255,255,255,0.12);
+          background: rgba(255,255,255,0.05);
+          color: #e2e8f0; font-size: 0.75rem; font-weight: 600;
+          cursor: pointer; transition: all 0.2s;
+        }
+        .call-btn:hover { background: rgba(255,255,255,0.1); }
+        .call-btn.primary {
+          background: linear-gradient(135deg,#7c3aed,#4f46e5);
+          border: none; color: #fff;
+          box-shadow: 0 10px 30px rgba(124,58,237,0.35);
+        }
+        .call-btn.danger {
+          background: rgba(239,68,68,0.2);
+          border: 1px solid rgba(239,68,68,0.35);
+          color: #fecaca;
+        }
+        .call-toast {
+          position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+          background: rgba(15,23,42,0.9);
+          color: #e2e8f0; padding: 0.6rem 1rem;
+          border-radius: 999px; font-size: 0.72rem;
+          border: 1px solid rgba(255,255,255,0.08);
+          z-index: 70;
+          box-shadow: 0 16px 40px rgba(0,0,0,0.45);
         }
 
         /* reveal */
@@ -1016,14 +1510,76 @@ export default function Chat() {
               </div>
             </div>
 
-            <button className="logout-btn" onClick={handleLogout}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16 17 21 12 16 7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
-              </svg>
-              Sign out
-            </button>
+            <div className="topbar-right">
+              <div className="notif-wrap" ref={notificationPanelRef}>
+                <button
+                  type="button"
+                  className={`notif-btn ${notificationsOpen ? "active" : ""}`}
+                  onClick={() => setNotificationsOpen((open) => !open)}
+                  aria-label="Notifications"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 7h18s-3 0-3-7"/>
+                    <path d="M13.73 21a2 2 0 01-3.46 0"/>
+                  </svg>
+                  {unreadCount > 0 && (
+                    <span className="notif-badge">{unreadCount > 9 ? "9+" : unreadCount}</span>
+                  )}
+                </button>
+
+                {notificationsOpen && (
+                  <div className="notif-panel">
+                    <div className="notif-panel-header">
+                      <div>
+                        <p className="notif-title">Notifications</p>
+                        <p className="notif-sub">Latest updates from your chats</p>
+                      </div>
+                      <span className="notif-count">{notifications.length}</span>
+                    </div>
+                    <div className="notif-panel-body">
+                      {notificationsLoading ? (
+                        <p className="notif-empty">Loading notifications...</p>
+                      ) : notifications.length === 0 ? (
+                        <p className="notif-empty">No notifications yet.</p>
+                      ) : notifications.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={`notif-item ${item.isRead ? "read" : "unread"}`}
+                          onClick={() => handleNotificationClick(item)}
+                        >
+                          <div className="notif-icon">
+                            {item.type === "CALL" ? "📞" : item.type === "ADMIN" ? "🛡️" : item.type === "SYSTEM" ? "⚙️" : "💬"}
+                          </div>
+                          <div className="notif-content">
+                            <p className="notif-label">
+                              {item.type === "CALL"
+                                ? `Call from ${resolveContactName(item.meta?.from)}`
+                                : item.type === "MESSAGE"
+                                  ? `New message from ${resolveContactName(item.meta?.senderId)}`
+                                  : item.type === "ADMIN"
+                                    ? "Admin update"
+                                    : "System alert"}
+                            </p>
+                            <p className="notif-text">{item.content}</p>
+                          </div>
+                          {!item.isRead && <span className="notif-dot" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <button className="logout-btn" onClick={handleLogout}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <polyline points="16 17 21 12 16 7"/>
+                  <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                Sign out
+              </button>
+            </div>
           </div>
 
           {activeContact ? (
@@ -1039,24 +1595,47 @@ export default function Chat() {
                 </div>
                 {/* action icons */}
                 <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
-                  {[
-                    <path key="v" d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>,
-                    <><circle key="p" cx="12" cy="12" r="3"/><path key="p2" d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/></>,
-                  ].map((icon, i) => (
-                    <button key={i} type="button" style={{
+                  <button
+                    type="button"
+                    aria-label="Start video call"
+                    onClick={() => startCall("video")}
+                    disabled={callStatus !== "idle"}
+                    style={{
                       width: 34, height: 34, borderRadius: "0.6rem",
                       background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      cursor: "pointer", color: "#64748b", transition: "all 0.15s",
+                      cursor: callStatus === "idle" ? "pointer" : "not-allowed",
+                      color: "#64748b", transition: "all 0.15s",
+                      opacity: callStatus === "idle" ? 1 : 0.5,
                     }}
-                      onMouseEnter={e => { e.currentTarget.style.background = "rgba(139,92,246,0.1)"; e.currentTarget.style.color = "#a78bfa"; }}
-                      onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "#64748b"; }}
-                    >
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        {icon}
-                      </svg>
-                    </button>
-                  ))}
+                    onMouseEnter={e => { if (callStatus === "idle") { e.currentTarget.style.background = "rgba(139,92,246,0.1)"; e.currentTarget.style.color = "#a78bfa"; } }}
+                    onMouseLeave={e => { if (callStatus === "idle") { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "#64748b"; } }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Start audio call"
+                    onClick={() => startCall("audio")}
+                    disabled={callStatus !== "idle"}
+                    style={{
+                      width: 34, height: 34, borderRadius: "0.6rem",
+                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      cursor: callStatus === "idle" ? "pointer" : "not-allowed",
+                      color: "#64748b", transition: "all 0.15s",
+                      opacity: callStatus === "idle" ? 1 : 0.5,
+                    }}
+                    onMouseEnter={e => { if (callStatus === "idle") { e.currentTarget.style.background = "rgba(139,92,246,0.1)"; e.currentTarget.style.color = "#a78bfa"; } }}
+                    onMouseLeave={e => { if (callStatus === "idle") { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; e.currentTarget.style.color = "#64748b"; } }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="M19.07 4.93a10 10 0 010 14.14M4.93 4.93a10 10 0 000 14.14"/>
+                    </svg>
+                  </button>
                 </div>
               </div>
 
@@ -1084,6 +1663,70 @@ export default function Chat() {
             </div>
           )}
         </div>
+
+        {callStatus !== "idle" && (
+          <div className="call-overlay">
+            <div className="call-card">
+              <div className="call-header">
+                <div>
+                  <h3>
+                    {callStatus === "incoming"
+                      ? "Incoming call"
+                      : callStatus === "outgoing"
+                        ? "Calling..."
+                        : "In call"}
+                  </h3>
+                  <p style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: "0.25rem" }}>
+                    {resolveContactName(callPeerId)}
+                  </p>
+                </div>
+                <span className="call-pill">{callType === "audio" ? "Audio" : "Video"}</span>
+              </div>
+
+              <div className="call-grid">
+                {callType === "video" ? (
+                  <>
+                    <video ref={remoteVideoRef} autoPlay playsInline className="call-video" />
+                    <video ref={localVideoRef} autoPlay muted playsInline className="call-video" />
+                  </>
+                ) : (
+                  <>
+                    <div className="call-placeholder">
+                      <Avatar name={resolveContactName(callPeerId)} size={56} />
+                      <span>Remote audio</span>
+                    </div>
+                    <div className="call-placeholder">
+                      <Avatar name={user?.name || "You"} size={56} />
+                      <span>Your audio</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="call-controls">
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  {callStatus === "incoming" && (
+                    <>
+                      <button className="call-btn primary" type="button" onClick={acceptCall}>Accept</button>
+                      <button className="call-btn danger" type="button" onClick={declineCall}>Decline</button>
+                    </>
+                  )}
+                  {callStatus === "outgoing" && (
+                    <button className="call-btn danger" type="button" onClick={endCall}>Cancel</button>
+                  )}
+                  {callStatus === "active" && (
+                    <button className="call-btn danger" type="button" onClick={endCall}>End call</button>
+                  )}
+                </div>
+                <span style={{ fontSize: "0.7rem", color: "#64748b" }}>
+                  {callStatus === "active" ? "Secure connection active" : "Waiting for response"}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {callNotice && <div className="call-toast">{callNotice}</div>}
       </div>
     </>
   );
