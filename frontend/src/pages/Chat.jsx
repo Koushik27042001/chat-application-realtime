@@ -464,6 +464,15 @@ export default function Chat() {
   const [callPeerId, setCallPeerId] = useState(null);
   const [incomingOffer, setIncomingOffer] = useState(null);
   const [callNotice, setCallNotice] = useState("");
+  const [isMicMuted, setIsMicMuted] = useState(false);
+  const [isCamOff, setIsCamOff] = useState(false);
+  const [callDebug, setCallDebug] = useState({
+    iceState: "new",
+    connectionState: "new",
+    signalingState: "stable",
+    localCandidates: 0,
+    remoteCandidates: 0,
+  });
 
   const activeChatIdRef = useRef(null);
   const contactsRef = useRef([]);
@@ -475,9 +484,14 @@ export default function Chat() {
   const peerRef = useRef(null);
   const localStreamRef = useRef(null);
   const pendingIceRef = useRef([]);
+  const callTimeoutRef = useRef(null);
+  const disconnectTimerRef = useRef(null);
   const avatarInputRef = useRef(null);
 
   const searchQuery = searchTerm.trim();
+  const rtcDebugEnabled =
+    import.meta?.env?.VITE_RTC_DEBUG === "true" ||
+    (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("rtcDebug"));
 
   /* auto-scroll */
   useEffect(() => {
@@ -545,10 +559,19 @@ export default function Chat() {
     setCallPeerId(from);
     setIncomingOffer(offer);
     setCallStatus("incoming");
+    clearCallTimers();
+    callTimeoutRef.current = setTimeout(() => {
+      if (socket && user?.id) {
+        socket.emit("call:decline", { to: from, from: user.id });
+      }
+      setCallNotice("Missed call");
+      endCallCleanup();
+    }, 35000);
   };
 
   const handleCallAccepted = async ({ answer }) => {
     if (!peerRef.current || !answer) return;
+    clearCallTimers();
     await peerRef.current.setRemoteDescription(answer);
     if (pendingIceRef.current.length) {
       const pending = [...pendingIceRef.current];
@@ -584,6 +607,7 @@ export default function Chat() {
 
   const handleCallIce = async ({ candidate }) => {
     if (!candidate) return;
+    setCallDebug((cur) => ({ ...cur, remoteCandidates: cur.remoteCandidates + 1 }));
     if (!peerRef.current || !peerRef.current.remoteDescription) {
       pendingIceRef.current.push(candidate);
       return;
@@ -762,14 +786,64 @@ export default function Chat() {
     setCallType("video");
     setCallPeerId(null);
     setIncomingOffer(null);
+    setIsMicMuted(false);
+    setIsCamOff(false);
     pendingIceRef.current = [];
+    setCallDebug({
+      iceState: "new",
+      connectionState: "new",
+      signalingState: "stable",
+      localCandidates: 0,
+      remoteCandidates: 0,
+    });
+  };
+
+  const clearCallTimers = () => {
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = null;
+    }
+    if (disconnectTimerRef.current) {
+      clearTimeout(disconnectTimerRef.current);
+      disconnectTimerRef.current = null;
+    }
+  };
+
+  const safePlay = (el) => {
+    if (!el?.play) return;
+    try {
+      const result = el.play();
+      if (result?.catch) result.catch(() => {});
+    } catch {}
+  };
+
+  const getIceServers = () => {
+    const fallback = [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      { urls: "stun:stun2.l.google.com:19302" },
+    ];
+
+    const raw = import.meta?.env?.VITE_RTC_ICE_SERVERS;
+    if (!raw) return fallback;
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+      return fallback;
+    } catch {
+      return fallback;
+    }
   };
 
   const endCallCleanup = () => {
+    clearCallTimers();
     try {
       if (peerRef.current) {
         peerRef.current.ontrack = null;
         peerRef.current.onicecandidate = null;
+        peerRef.current.oniceconnectionstatechange = null;
+        peerRef.current.onconnectionstatechange = null;
         peerRef.current.close();
         peerRef.current = null;
       }
@@ -787,11 +861,19 @@ export default function Chat() {
 
   const createPeer = async (peerId, type) => {
     const peer = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: getIceServers(),
+    });
+    setCallDebug({
+      iceState: peer.iceConnectionState,
+      connectionState: peer.connectionState,
+      signalingState: peer.signalingState,
+      localCandidates: 0,
+      remoteCandidates: 0,
     });
 
     peer.onicecandidate = (event) => {
       if (event.candidate && socket) {
+        setCallDebug((cur) => ({ ...cur, localCandidates: cur.localCandidates + 1 }));
         socket.emit("call:ice", {
           to: peerId,
           from: user?.id,
@@ -803,18 +885,91 @@ export default function Chat() {
     peer.ontrack = (event) => {
       const [stream] = event.streams || [];
       if (!stream) return;
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = stream;
-      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = stream;
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = stream;
+        safePlay(remoteVideoRef.current);
+      }
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = stream;
+        safePlay(remoteAudioRef.current);
+      }
     };
 
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: type === "video",
-      audio: true,
-    });
+    peer.oniceconnectionstatechange = () => {
+      const state = peer.iceConnectionState;
+      setCallDebug((cur) => ({ ...cur, iceState: state }));
+      if (state === "connected" || state === "completed") {
+        clearCallTimers();
+        if (callStatus !== "active") setCallStatus("active");
+        return;
+      }
+      if (state === "failed") {
+        setCallNotice("Connection failed. Trying to reconnect...");
+        try {
+          peer.restartIce?.();
+        } catch {}
+      }
+      if (state === "disconnected") {
+        if (!disconnectTimerRef.current) {
+          disconnectTimerRef.current = setTimeout(() => {
+            setCallNotice("Connection lost");
+            endCallCleanup();
+          }, 6000);
+        }
+      }
+      if (state === "closed") {
+        endCallCleanup();
+      }
+    };
+
+    peer.onconnectionstatechange = () => {
+      const state = peer.connectionState;
+      setCallDebug((cur) => ({ ...cur, connectionState: state }));
+      if (state === "connected") {
+        clearCallTimers();
+        if (callStatus !== "active") setCallStatus("active");
+      }
+      if (state === "failed") {
+        setCallNotice("Connection failed");
+        endCallCleanup();
+      }
+      if (state === "disconnected") {
+        if (!disconnectTimerRef.current) {
+          disconnectTimerRef.current = setTimeout(() => {
+            setCallNotice("Connection lost");
+            endCallCleanup();
+          }, 6000);
+        }
+      }
+    };
+
+    peer.onsignalingstatechange = () => {
+      setCallDebug((cur) => ({ ...cur, signalingState: peer.signalingState }));
+    };
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: type === "video",
+        audio: true,
+      });
+    } catch (error) {
+      if (error?.name === "NotAllowedError") {
+        setCallNotice("Please allow microphone/camera access");
+      } else if (error?.name === "NotFoundError") {
+        setCallNotice("No microphone/camera found");
+      } else {
+        setCallNotice("Unable to access media devices");
+      }
+      throw error;
+    }
     localStreamRef.current = stream;
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = stream;
+      safePlay(localVideoRef.current);
     }
+    stream.getAudioTracks().forEach((track) => { track.enabled = !isMicMuted; });
+    stream.getVideoTracks().forEach((track) => { track.enabled = !isCamOff; });
     stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
     peerRef.current = peer;
@@ -848,6 +1003,11 @@ export default function Chat() {
     setCallType(type);
     setCallPeerId(activeContact.id);
     setCallStatus("outgoing");
+    clearCallTimers();
+    callTimeoutRef.current = setTimeout(() => {
+      setCallNotice("No answer");
+      endCallCleanup();
+    }, 35000);
 
     try {
       const peer = await createPeer(activeContact.id, type);
@@ -869,6 +1029,7 @@ export default function Chat() {
     if (!socket || !user?.id || !callPeerId || !incomingOffer) return;
     setCallNotice("");
     setCallStatus("active");
+    clearCallTimers();
     try {
       const peer = await createPeer(callPeerId, callType);
       await peer.setRemoteDescription(incomingOffer);
@@ -902,6 +1063,20 @@ export default function Chat() {
       socket.emit("call:hangup", { to: callPeerId, from: user.id });
     }
     endCallCleanup();
+  };
+
+  const toggleMic = () => {
+    const stream = localStreamRef.current;
+    if (!stream) return;
+    stream.getAudioTracks().forEach((track) => { track.enabled = isMicMuted; });
+    setIsMicMuted((v) => !v);
+  };
+
+  const toggleCam = () => {
+    const stream = localStreamRef.current;
+    if (!stream) return;
+    stream.getVideoTracks().forEach((track) => { track.enabled = isCamOff; });
+    setIsCamOff((v) => !v);
   };
 
   const handleNotificationClick = async (notification) => {
@@ -1215,9 +1390,10 @@ export default function Chat() {
         .chat-header-bar {
           display: flex; align-items: center; gap: 0.85rem;
           padding: 0.8rem 1.25rem;
-          background: rgba(13,15,26,0.8);
+          background: linear-gradient(180deg, rgba(13,15,26,0.92), rgba(13,15,26,0.7));
           border-bottom: 1px solid rgba(255,255,255,0.05);
           backdrop-filter: blur(16px);
+          box-shadow: 0 10px 24px rgba(0,0,0,0.25);
           flex-shrink: 0;
         }
         .chat-contact-name {
@@ -1235,7 +1411,9 @@ export default function Chat() {
           padding: 1.25rem 1rem;
           display: flex; flex-direction: column; gap: 0.1rem;
           scrollbar-width: thin; scrollbar-color: rgba(139,92,246,0.2) transparent;
-          background: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(124,58,237,0.04) 0%, transparent 70%);
+          background:
+            radial-gradient(ellipse 80% 50% at 50% 0%, rgba(124,58,237,0.05) 0%, transparent 70%),
+            radial-gradient(ellipse 40% 30% at 10% 60%, rgba(148,163,184,0.06) 0%, transparent 70%);
         }
         .messages-area::-webkit-scrollbar { width: 4px; }
         .messages-area::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.2); border-radius: 99px; }
@@ -1328,7 +1506,8 @@ export default function Chat() {
         }
         .call-card {
           width: min(880px, 95vw);
-          background: rgba(8,10,20,0.92);
+          background:
+            linear-gradient(180deg, rgba(10,12,24,0.96), rgba(8,10,20,0.9));
           border: 1px solid rgba(255,255,255,0.1);
           border-radius: 1.5rem;
           box-shadow: 0 28px 70px rgba(0,0,0,0.6);
@@ -1358,9 +1537,10 @@ export default function Chat() {
         .call-video {
           width: 100%; height: 260px;
           border-radius: 1rem;
-          background: #0f172a;
+          background: linear-gradient(135deg, #0f172a, #111827);
           border: 1px solid rgba(255,255,255,0.08);
           object-fit: cover;
+          box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
         }
         .call-placeholder {
           width: 100%; height: 260px;
@@ -1379,6 +1559,17 @@ export default function Chat() {
           gap: 0.75rem;
           flex-wrap: wrap;
         }
+        .call-left {
+          display: flex;
+          align-items: center;
+          gap: 0.85rem;
+          flex-wrap: wrap;
+        }
+        .call-toggles {
+          display: flex;
+          gap: 0.4rem;
+          flex-wrap: wrap;
+        }
         .call-actions {
           display: flex; align-items: center; gap: 0.5rem;
         }
@@ -1394,6 +1585,15 @@ export default function Chat() {
           cursor: pointer; transition: all 0.2s;
         }
         .call-btn:hover { background: rgba(255,255,255,0.1); }
+        .call-btn.toggle.active {
+          background: rgba(239,68,68,0.18);
+          border: 1px solid rgba(239,68,68,0.35);
+          color: #fecaca;
+        }
+        .call-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
         .call-btn.primary {
           background: linear-gradient(135deg,#7c3aed,#4f46e5);
           border: none; color: #fff;
@@ -1751,9 +1951,31 @@ export default function Chat() {
               </div>
 
               <div className="call-controls">
-                <span className="call-status">
-                  {callStatus === "active" ? "Secure connection active" : "Waiting for response"}
-                </span>
+                <div className="call-left">
+                  <div className="call-toggles">
+                    <button
+                      className={`call-btn toggle ${isMicMuted ? "active" : ""}`}
+                      type="button"
+                      onClick={toggleMic}
+                      disabled={!localStreamRef.current}
+                    >
+                      {isMicMuted ? "Unmute mic" : "Mute mic"}
+                    </button>
+                    {callType === "video" && (
+                      <button
+                        className={`call-btn toggle ${isCamOff ? "active" : ""}`}
+                        type="button"
+                        onClick={toggleCam}
+                        disabled={!localStreamRef.current}
+                      >
+                        {isCamOff ? "Turn camera on" : "Turn camera off"}
+                      </button>
+                    )}
+                  </div>
+                  <span className="call-status">
+                    {callStatus === "active" ? "Secure connection active" : "Waiting for response"}
+                  </span>
+                </div>
                 <div className="call-actions">
                   {callStatus === "incoming" && (
                     <>
@@ -1769,6 +1991,27 @@ export default function Chat() {
                   )}
                 </div>
               </div>
+
+              {rtcDebugEnabled && (
+                <div style={{
+                  marginTop: "0.75rem",
+                  padding: "0.6rem 0.75rem",
+                  borderRadius: "0.75rem",
+                  border: "1px dashed rgba(255,255,255,0.12)",
+                  background: "rgba(15,23,42,0.55)",
+                  fontSize: "0.7rem",
+                  color: "#94a3b8",
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                  gap: "0.4rem 0.75rem",
+                }}>
+                  <div>ICE: <strong style={{ color: "#e2e8f0" }}>{callDebug.iceState}</strong></div>
+                  <div>Conn: <strong style={{ color: "#e2e8f0" }}>{callDebug.connectionState}</strong></div>
+                  <div>Signal: <strong style={{ color: "#e2e8f0" }}>{callDebug.signalingState}</strong></div>
+                  <div>ICE out: <strong style={{ color: "#e2e8f0" }}>{callDebug.localCandidates}</strong></div>
+                  <div>ICE in: <strong style={{ color: "#e2e8f0" }}>{callDebug.remoteCandidates}</strong></div>
+                </div>
+              )}
             </div>
           </div>
         )}
