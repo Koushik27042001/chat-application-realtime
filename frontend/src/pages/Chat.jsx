@@ -471,6 +471,7 @@ export default function Chat() {
   const notificationPanelRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
   const peerRef = useRef(null);
   const localStreamRef = useRef(null);
   const pendingIceRef = useRef([]);
@@ -778,6 +779,7 @@ export default function Chat() {
       }
       if (localVideoRef.current) localVideoRef.current.srcObject = null;
       if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
     } finally {
       resetCallState();
     }
@@ -800,9 +802,9 @@ export default function Chat() {
 
     peer.ontrack = (event) => {
       const [stream] = event.streams || [];
-      if (stream && remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = stream;
-      }
+      if (!stream) return;
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = stream;
+      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = stream;
     };
 
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -1377,6 +1379,12 @@ export default function Chat() {
           gap: 0.75rem;
           flex-wrap: wrap;
         }
+        .call-actions {
+          display: flex; align-items: center; gap: 0.5rem;
+        }
+        .call-status {
+          font-size: 0.7rem; color: #64748b;
+        }
         .call-btn {
           padding: 0.55rem 1.1rem;
           border-radius: 0.75rem;
@@ -1404,6 +1412,18 @@ export default function Chat() {
           border: 1px solid rgba(255,255,255,0.08);
           z-index: 70;
           box-shadow: 0 16px 40px rgba(0,0,0,0.45);
+        }
+        @media (max-width: 560px) {
+          .call-controls {
+            flex-direction: column-reverse;
+            align-items: stretch;
+          }
+          .call-actions {
+            justify-content: center;
+          }
+          .call-status {
+            text-align: center;
+          }
         }
 
         /* reveal */
@@ -1717,6 +1737,7 @@ export default function Chat() {
                   </>
                 ) : (
                   <>
+                    <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: "none" }} />
                     <div className="call-placeholder">
                       <Avatar name={resolveContactName(callPeerId)} size={56} />
                       <span>Remote audio</span>
@@ -1730,7 +1751,10 @@ export default function Chat() {
               </div>
 
               <div className="call-controls">
-                <div style={{ display: "flex", gap: "0.5rem" }}>
+                <span className="call-status">
+                  {callStatus === "active" ? "Secure connection active" : "Waiting for response"}
+                </span>
+                <div className="call-actions">
                   {callStatus === "incoming" && (
                     <>
                       <button className="call-btn primary" type="button" onClick={acceptCall}>Accept</button>
@@ -1744,9 +1768,6 @@ export default function Chat() {
                     <button className="call-btn danger" type="button" onClick={endCall}>End call</button>
                   )}
                 </div>
-                <span style={{ fontSize: "0.7rem", color: "#64748b" }}>
-                  {callStatus === "active" ? "Secure connection active" : "Waiting for response"}
-                </span>
               </div>
             </div>
           </div>
