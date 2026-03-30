@@ -1,64 +1,89 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
-import { authApi } from "../services/api";
+import {
+  authApi,
+  clearAccessToken,
+  registerUnauthorizedHandler,
+  setAccessToken,
+} from "../services/api";
 import { getGoogleIdToken } from "../services/googleAuth";
 
 const AuthContext = createContext(null);
-const STORAGE_KEY = "chat-app-auth-v2";
+const USER_STORAGE_KEY = "chat-app-user-v3";
+const LEGACY_AUTH_STORAGE_KEY = "chat-app-auth-v2";
 
-const persistAuth = (authData) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(authData));
+const persistUser = (user) => {
+  if (!user) {
+    localStorage.removeItem(USER_STORAGE_KEY);
+    return;
+  }
+
+  localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+};
+
+const readStoredUser = () => {
+  try {
+    const raw = localStorage.getItem(USER_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    localStorage.removeItem(USER_STORAGE_KEY);
+    return null;
+  }
 };
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  useEffect(() => {
+    localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY);
+  }, []);
+
+  const [user, setUser] = useState(() => readStoredUser());
   const [token, setToken] = useState("");
   const [isHydrated, setIsHydrated] = useState(false);
+  const isMountedRef = useRef(true);
+
+  const applyAuthState = (nextToken, nextUser) => {
+    setAccessToken(nextToken);
+    setToken(nextToken || "");
+    setUser(nextUser || null);
+    persistUser(nextUser || null);
+  };
+
+  const clearAuthState = () => {
+    clearAccessToken();
+    setToken("");
+    setUser(null);
+    persistUser(null);
+  };
 
   useEffect(() => {
-    let isMounted = true;
+    registerUnauthorizedHandler(() => {
+      if (isMountedRef.current) {
+        clearAuthState();
+      }
+    });
+
+    return () => {
+      registerUnauthorizedHandler(null);
+    };
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
 
     const restoreSession = async () => {
-      const storedAuth = localStorage.getItem(STORAGE_KEY);
-
-      if (!storedAuth) {
-        if (isMounted) {
-          setIsHydrated(true);
-        }
-        return;
-      }
-
       try {
-        const parsedAuth = JSON.parse(storedAuth);
-        const storedToken = parsedAuth?.token ?? "";
-
-        if (!storedToken) {
-          localStorage.removeItem(STORAGE_KEY);
+        const { data } = await authApi.refresh();
+        if (!isMountedRef.current) {
           return;
         }
 
-        const { data } = await authApi.me(storedToken);
-
-        if (!isMounted) {
-          return;
-        }
-
-        const nextAuth = {
-          token: storedToken,
-          user: data.user,
-        };
-
-        setUser(nextAuth.user);
-        setToken(nextAuth.token);
-        persistAuth(nextAuth);
-      } catch (error) {
-        localStorage.removeItem(STORAGE_KEY);
-        if (isMounted) {
-          setUser(null);
-          setToken("");
+        applyAuthState(data.token, data.user);
+      } catch {
+        if (isMountedRef.current) {
+          clearAuthState();
         }
       } finally {
-        if (isMounted) {
+        if (isMountedRef.current) {
           setIsHydrated(true);
         }
       }
@@ -67,14 +92,12 @@ export const AuthProvider = ({ children }) => {
     restoreSession();
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
     };
   }, []);
 
   const saveAuth = (authData) => {
-    setUser(authData.user);
-    setToken(authData.token);
-    persistAuth(authData);
+    applyAuthState(authData?.token || "", authData?.user || null);
   };
 
   const login = async ({ email, password }) => {
@@ -119,7 +142,6 @@ export const AuthProvider = ({ children }) => {
     return nextAuth;
   };
 
-  /** Hardcoded admin login (hidden URL only). */
   const adminPanelLogin = async ({ username, password }) => {
     const { data } = await authApi.adminPanelLogin({
       username,
@@ -133,10 +155,14 @@ export const AuthProvider = ({ children }) => {
     return nextAuth;
   };
 
-  const logout = () => {
-    setUser(null);
-    setToken("");
-    localStorage.removeItem(STORAGE_KEY);
+  const logout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // Clear local auth state even if the server session is already gone.
+    } finally {
+      clearAuthState();
+    }
   };
 
   return (
@@ -159,3 +185,4 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+

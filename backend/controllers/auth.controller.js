@@ -5,11 +5,27 @@ const {
   loginService,
   googleLoginService,
   adminPanelLoginService,
+  refreshSessionService,
+  logoutService,
   forgotPasswordService,
   resetPasswordService,
   sendOTPService,
   verifyOTPAndResetService,
 } = require("../services/auth.service");
+const {
+  REFRESH_COOKIE_NAME,
+  getRefreshCookieOptions,
+  clearRefreshCookieOptions,
+  readCookie,
+} = require("../utils/authCookies");
+
+const attachRefreshCookie = (res, refreshToken) => {
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, getRefreshCookieOptions());
+};
+
+const clearRefreshCookie = (res) => {
+  res.cookie(REFRESH_COOKIE_NAME, "", clearRefreshCookieOptions());
+};
 
 const register = asyncHandler(async (req, res) => {
   const { name, email, password } = req.body;
@@ -19,9 +35,13 @@ const register = asyncHandler(async (req, res) => {
   }
 
   const result = await registerService(name, email, password);
+  attachRefreshCookie(res, result.refreshToken);
 
   res.status(201).json(
-    new ApiResponse(201, "User registered successfully", result)
+    new ApiResponse(201, "User registered successfully", {
+      token: result.token,
+      user: result.user,
+    })
   );
 });
 
@@ -33,9 +53,13 @@ const login = asyncHandler(async (req, res) => {
   }
 
   const result = await loginService(email, password);
+  attachRefreshCookie(res, result.refreshToken);
 
   res.status(200).json(
-    new ApiResponse(200, "Login successful", result)
+    new ApiResponse(200, "Login successful", {
+      token: result.token,
+      user: result.user,
+    })
   );
 });
 
@@ -47,9 +71,13 @@ const googleLogin = asyncHandler(async (req, res) => {
   }
 
   const result = await googleLoginService(idToken);
+  attachRefreshCookie(res, result.refreshToken);
 
   res.status(200).json(
-    new ApiResponse(200, "Login successful", result)
+    new ApiResponse(200, "Login successful", {
+      token: result.token,
+      user: result.user,
+    })
   );
 });
 
@@ -61,10 +89,43 @@ const adminPanelLogin = asyncHandler(async (req, res) => {
   }
 
   const result = await adminPanelLoginService({ username, password });
+  attachRefreshCookie(res, result.refreshToken);
 
   res.status(200).json(
-    new ApiResponse(200, "Admin login successful", result)
+    new ApiResponse(200, "Admin login successful", {
+      token: result.token,
+      user: result.user,
+    })
   );
+});
+
+const refreshSession = asyncHandler(async (req, res) => {
+  const refreshToken = readCookie(req);
+  const result = await refreshSessionService(refreshToken);
+  attachRefreshCookie(res, result.refreshToken);
+
+  res.status(200).json(
+    new ApiResponse(200, "Session refreshed", {
+      token: result.token,
+      user: result.user,
+    })
+  );
+});
+
+const logout = asyncHandler(async (req, res) => {
+  const refreshToken = readCookie(req);
+
+  if (refreshToken) {
+    try {
+      const session = await refreshSessionService(refreshToken);
+      await logoutService(session.user.id);
+    } catch {
+      // Ignore invalid refresh tokens during logout and just clear the cookie.
+    }
+  }
+
+  clearRefreshCookie(res);
+  res.status(200).json(new ApiResponse(200, "Logged out successfully"));
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
@@ -121,6 +182,8 @@ module.exports = {
   login,
   googleLogin,
   adminPanelLogin,
+  refreshSession,
+  logout,
   getCurrentUser,
   forgotPassword,
   resetPassword,

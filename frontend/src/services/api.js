@@ -3,23 +3,112 @@ import axios from "axios";
 const API_BASE_URL =
   import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-const createAuthConfig = (token) => ({
-  headers: {
-    Authorization: `Bearer ${token}`,
-  },
+let accessToken = "";
+let refreshPromise = null;
+let unauthorizedHandler = () => {};
+
+export const setAccessToken = (token) => {
+  accessToken = token || "";
+};
+
+export const clearAccessToken = () => {
+  accessToken = "";
+};
+
+export const registerUnauthorizedHandler = (handler) => {
+  unauthorizedHandler = typeof handler === "function" ? handler : () => {};
+};
+
+const createAuthConfig = () => ({
+  headers: accessToken
+    ? {
+        Authorization: `Bearer ${accessToken}`,
+      }
+    : {},
 });
+
+const shouldSkipRefresh = (url = "") =>
+  [
+    "/auth/login",
+    "/auth/register",
+    "/auth/google",
+    "/auth/admin-login",
+    "/auth/refresh",
+    "/auth/logout",
+    "/auth/forgot-password",
+    "/auth/reset-password",
+    "/auth/send-otp",
+    "/auth/verify-otp",
+  ].some((path) => url.includes(path));
+
+const refreshAccessToken = async () => {
+  if (!refreshPromise) {
+    refreshPromise = apiClient
+      .post("/auth/refresh")
+      .then(({ data }) => {
+        setAccessToken(data.token);
+        return data.token;
+      })
+      .catch((error) => {
+        clearAccessToken();
+        unauthorizedHandler();
+        throw error;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+
+  return refreshPromise;
+};
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
+  withCredentials: true,
 });
 
-// Unwrap enterprise ApiResponse format: { status, statusCode, message, data }
-apiClient.interceptors.response.use((res) => {
-  if (res?.data?.data !== undefined && res?.data?.status) {
-    res.data = res.data.data;
+apiClient.interceptors.request.use((config) => {
+  const nextConfig = { ...config };
+  nextConfig.headers = nextConfig.headers || {};
+
+  if (!nextConfig.headers.Authorization && accessToken) {
+    nextConfig.headers.Authorization = `Bearer ${accessToken}`;
   }
-  return res;
+
+  return nextConfig;
 });
+
+apiClient.interceptors.response.use(
+  (res) => {
+    if (res?.data?.data !== undefined && res?.data?.status) {
+      res.data = res.data.data;
+    }
+    return res;
+  },
+  async (error) => {
+    const originalRequest = error?.config || {};
+    const status = error?.response?.status;
+
+    if (
+      status === 401 &&
+      !originalRequest._retry &&
+      !shouldSkipRefresh(originalRequest.url)
+    ) {
+      originalRequest._retry = true;
+
+      try {
+        const token = await refreshAccessToken();
+        originalRequest.headers = originalRequest.headers || {};
+        originalRequest.headers.Authorization = `Bearer ${token}`;
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 export const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, "");
 
@@ -28,6 +117,8 @@ export const authApi = {
   login: (payload) => apiClient.post("/auth/login", payload),
   loginWithGoogle: (payload) => apiClient.post("/auth/google", payload),
   adminPanelLogin: (payload) => apiClient.post("/auth/admin-login", payload),
+  refresh: () => apiClient.post("/auth/refresh"),
+  logout: () => apiClient.post("/auth/logout"),
   me: (token) => apiClient.get("/auth/me", createAuthConfig(token)),
   forgotPassword: (email) => apiClient.post("/auth/forgot-password", { email }),
   resetPassword: (token, password) =>
@@ -67,3 +158,4 @@ export const userApi = {
   updateAvatar: (token, avatar) =>
     apiClient.patch("/users/me/avatar", { avatar }, createAuthConfig(token)),
 };
+

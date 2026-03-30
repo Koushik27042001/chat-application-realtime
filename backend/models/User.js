@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true,
         trim: true,
-        index: true, // 🔥 search optimization
+        index: true,
     },
     email: {
         type: String,
@@ -32,7 +32,6 @@ const userSchema = new mongoose.Schema({
         type: String,
         default: "",
     },
-
     role: {
         type: String,
         enum: ["user", "admin"],
@@ -43,8 +42,6 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: null,
     },
-
-    // 🔥 NEW (important for chat apps)
     isOnline: {
         type: Boolean,
         default: false,
@@ -53,12 +50,18 @@ const userSchema = new mongoose.Schema({
         type: Date,
         default: null,
     },
-
-    // Password reset (link-based) - store hashed token, send plain in URL
+    refreshTokenHash: {
+        type: String,
+        default: "",
+        select: false,
+    },
+    refreshTokenExpire: {
+        type: Date,
+        default: null,
+        select: false,
+    },
     resetPasswordToken: { type: String },
     resetPasswordExpire: { type: Date },
-
-    // OTP-based reset
     otp: { type: String },
     otpExpire: { type: Date },
 }, {

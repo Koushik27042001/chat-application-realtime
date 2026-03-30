@@ -7,6 +7,9 @@ const findByFirebaseUid = (firebaseUid) => User.findOne({ firebaseUid });
 const findById = (id, projection = "-password") =>
   User.findById(id).select(projection).lean();
 
+const findByIdDocument = (id, projection = "") =>
+  User.findById(id).select(projection);
+
 const create = (data) => User.create(data);
 
 const findMany = (filter = {}, options = {}) => {
@@ -34,6 +37,7 @@ module.exports = {
   findByEmail,
   findByFirebaseUid,
   findById,
+  findByIdDocument,
   create,
   findMany,
   findByResetPasswordToken,

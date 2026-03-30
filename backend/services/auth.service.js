@@ -12,8 +12,24 @@ const sendEmail = require("./email.service");
 const { verifyIdToken } = require("../firebaseAdmin");
 const { createDefaultAvatar } = require("../utils/avatar");
 
-const createToken = (id) =>
-  jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || "15m";
+const REFRESH_TOKEN_TTL = process.env.JWT_REFRESH_EXPIRES_IN || "30d";
+const REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+
+const createAccessToken = (id) =>
+  jwt.sign({ id, type: "access" }, process.env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
+
+const createRefreshToken = (id) =>
+  jwt.sign({ id, type: "refresh" }, REFRESH_TOKEN_SECRET, { expiresIn: REFRESH_TOKEN_TTL });
+
+const hashToken = (value) =>
+  crypto.createHash("sha256").update(String(value || ""), "utf8").digest("hex");
+
+const getRefreshExpiryDate = () => {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 30);
+  return expiresAt;
+};
 
 const generateOTP = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
@@ -27,22 +43,41 @@ const sanitizeUser = (user) => ({
   lastLogin: user.lastLogin ? user.lastLogin.toISOString() : null,
 });
 
-const recordSuccessfulAuth = async (user) => {
-  user.lastLogin = new Date();
+const persistRefreshToken = async (user, refreshToken) => {
+  user.refreshTokenHash = hashToken(refreshToken);
+  user.refreshTokenExpire = getRefreshExpiryDate();
   await user.save();
 };
 
-/** Compare secrets without leaking length via timingSafeEqual on fixed-length digests */
+const clearRefreshToken = async (user) => {
+  user.refreshTokenHash = "";
+  user.refreshTokenExpire = null;
+  await user.save();
+};
+
+const issueAuthResult = async (user, { updateLastLogin = false } = {}) => {
+  if (updateLastLogin) {
+    user.lastLogin = new Date();
+  }
+
+  const accessToken = createAccessToken(user._id);
+  const refreshToken = createRefreshToken(user._id);
+
+  await persistRefreshToken(user, refreshToken);
+
+  return {
+    token: accessToken,
+    refreshToken,
+    user: sanitizeUser(user),
+  };
+};
+
 const safeEqualSecret = (a, b) => {
   const ah = crypto.createHash("sha256").update(String(a ?? ""), "utf8").digest();
   const bh = crypto.createHash("sha256").update(String(b ?? ""), "utf8").digest();
   return crypto.timingSafeEqual(ah, bh);
 };
 
-/**
- * Hardcoded admin login (see `config/adminPanel.js`). Use only from the hidden
- * route `/admin/<ADMIN_PANEL_SECRET>/login` on the client.
- */
 const adminPanelLoginService = async ({ username, password }) => {
   if (!username || !password) {
     const err = new Error("Username and password are required");
@@ -66,7 +101,7 @@ const adminPanelLoginService = async ({ username, password }) => {
 
   if (!user) {
     try {
-      const hashedPassword = await bcrypt.hash(HARDCODED_ADMIN_PASSWORD, 10);
+      const hashedPassword = await bcrypt.hash(HARDCODED_ADMIN_PASSWORD, 12);
       user = await userRepository.create({
         name: HARDCODED_ADMIN_NAME,
         email: HARDCODED_ADMIN_EMAIL,
@@ -91,13 +126,7 @@ const adminPanelLoginService = async ({ username, password }) => {
   }
 
   user.role = "admin";
-  user.lastLogin = new Date();
-  await user.save();
-
-  return {
-    token: createToken(user._id),
-    user: sanitizeUser(user),
-  };
+  return issueAuthResult(user, { updateLastLogin: true });
 };
 
 const registerService = async (name, email, password) => {
@@ -108,7 +137,7 @@ const registerService = async (name, email, password) => {
     throw error;
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword = await bcrypt.hash(password, 12);
   const user = await userRepository.create({
     name,
     email: email.toLowerCase(),
@@ -117,10 +146,7 @@ const registerService = async (name, email, password) => {
     lastLogin: new Date(),
   });
 
-  return {
-    token: createToken(user._id),
-    user: sanitizeUser(user),
-  };
+  return issueAuthResult(user, { updateLastLogin: true });
 };
 
 const loginService = async (email, password) => {
@@ -144,12 +170,7 @@ const loginService = async (email, password) => {
     throw error;
   }
 
-  await recordSuccessfulAuth(user);
-
-  return {
-    token: createToken(user._id),
-    user: sanitizeUser(user),
-  };
+  return issueAuthResult(user, { updateLastLogin: true });
 };
 
 const googleLoginService = async (idToken) => {
@@ -164,6 +185,7 @@ const googleLoginService = async (idToken) => {
     err.statusCode = 401;
     throw err;
   }
+
   const uid = decoded.uid;
   const email = (decoded.email || "").toLowerCase().trim();
 
@@ -181,11 +203,7 @@ const googleLoginService = async (idToken) => {
 
   let user = await userRepository.findByFirebaseUid(uid);
   if (user) {
-    await recordSuccessfulAuth(user);
-    return {
-      token: createToken(user._id),
-      user: sanitizeUser(user),
-    };
+    return issueAuthResult(user, { updateLastLogin: true });
   }
 
   user = await userRepository.findByEmail(email);
@@ -199,11 +217,7 @@ const googleLoginService = async (idToken) => {
     if (picture && (!user.avatar || user.avatar.includes("dicebear"))) {
       user.avatar = picture;
     }
-    await recordSuccessfulAuth(user);
-    return {
-      token: createToken(user._id),
-      user: sanitizeUser(user),
-    };
+    return issueAuthResult(user, { updateLastLogin: true });
   }
 
   const newUser = await userRepository.create({
@@ -214,10 +228,71 @@ const googleLoginService = async (idToken) => {
     lastLogin: new Date(),
   });
 
-  return {
-    token: createToken(newUser._id),
-    user: sanitizeUser(newUser),
-  };
+  return issueAuthResult(newUser, { updateLastLogin: true });
+};
+
+const refreshSessionService = async (refreshToken) => {
+  if (!refreshToken) {
+    const error = new Error("Refresh token is required");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
+  } catch (error) {
+    error.statusCode = 401;
+    error.message = "Refresh token expired or invalid";
+    throw error;
+  }
+
+  if (decoded.type && decoded.type !== "refresh") {
+    const error = new Error("Invalid refresh token");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const user = await userRepository.findByIdDocument(
+    decoded.id,
+    "+refreshTokenHash +refreshTokenExpire"
+  );
+
+  if (!user) {
+    const error = new Error("User not found");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const incomingHash = hashToken(refreshToken);
+  const storedHash = String(user.refreshTokenHash || "");
+  const refreshExpired = !user.refreshTokenExpire || user.refreshTokenExpire.getTime() <= Date.now();
+
+  if (!storedHash || refreshExpired || !safeEqualSecret(incomingHash, storedHash)) {
+    await clearRefreshToken(user);
+    const error = new Error("Refresh token expired or invalid");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  return issueAuthResult(user);
+};
+
+const logoutService = async (userId) => {
+  if (!userId) {
+    return;
+  }
+
+  const user = await userRepository.findByIdDocument(
+    userId,
+    "+refreshTokenHash +refreshTokenExpire"
+  );
+
+  if (!user) {
+    return;
+  }
+
+  await clearRefreshToken(user);
 };
 
 const forgotPasswordService = async (email) => {
@@ -235,7 +310,7 @@ const forgotPasswordService = async (email) => {
     .digest("hex");
 
   user.resetPasswordToken = hashedToken;
-  user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 min
+  user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
   await user.save();
 
   const baseUrl = (process.env.FRONTEND_URL || process.env.CLIENT_URL || "http://localhost:5173").replace(/\/$/, "");
@@ -268,7 +343,7 @@ const resetPasswordService = async (token, password) => {
     throw error;
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword = await bcrypt.hash(password, 12);
   user.password = hashedPassword;
   user.resetPasswordToken = undefined;
   user.resetPasswordExpire = undefined;
@@ -286,7 +361,7 @@ const sendOTPService = async (email) => {
   }
 
   const otp = generateOTP();
-  const otpExpire = Date.now() + 5 * 60 * 1000; // 5 min
+  const otpExpire = Date.now() + 5 * 60 * 1000;
 
   user.otp = otp;
   user.otpExpire = new Date(otpExpire);
@@ -309,7 +384,7 @@ const verifyOTPAndResetService = async (email, otp, password) => {
     throw error;
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword = await bcrypt.hash(password, 12);
   user.password = hashedPassword;
   user.otp = undefined;
   user.otpExpire = undefined;
@@ -323,6 +398,8 @@ module.exports = {
   loginService,
   googleLoginService,
   adminPanelLoginService,
+  refreshSessionService,
+  logoutService,
   forgotPasswordService,
   resetPasswordService,
   sendOTPService,

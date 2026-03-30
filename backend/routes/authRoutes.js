@@ -6,6 +6,8 @@ const {
   googleLogin,
   adminPanelLogin,
   register,
+  refreshSession,
+  logout,
   forgotPassword,
   resetPassword,
   sendOTP,
@@ -19,6 +21,8 @@ router.post("/register", register);
 router.post("/login", login);
 router.post("/google", googleLogin);
 router.post("/admin-login", adminPanelLogin);
+router.post("/refresh", refreshSession);
+router.post("/logout", logout);
 router.get("/me", auth, getCurrentUser);
 
 router.post("/forgot-password", forgotPassword);

@@ -15,6 +15,11 @@ const auth = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    if (decoded.type && decoded.type !== "access") {
+      return res.status(401).json({ status: "error", message: "Invalid token type" });
+    }
+
     const user = await userRepository.findById(decoded.id || decoded.userId);
 
     if (!user) {
@@ -31,7 +36,8 @@ const auth = async (req, res, next) => {
 
     next();
   } catch (error) {
-    return res.status(401).json({ status: "error", message: "Invalid token" });
+    const message = error?.name === "TokenExpiredError" ? "Token expired" : "Invalid token";
+    return res.status(401).json({ status: "error", message });
   }
 };
 
