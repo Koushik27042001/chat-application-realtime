@@ -7,14 +7,18 @@ const {
   HARDCODED_ADMIN_EMAIL,
   HARDCODED_ADMIN_NAME,
 } = require("../config/adminPanel");
+const User = require("../models/User");
 const userRepository = require("../repositories/user.repository");
 const sendEmail = require("./email.service");
 const { verifyIdToken } = require("../firebaseAdmin");
 const { createDefaultAvatar } = require("../utils/avatar");
 
-const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || "15m";
+/** Longer TTL = fewer refreshes / DB writes on each request burst. Override with JWT_EXPIRES_IN. */
+const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || "7d";
 const REFRESH_TOKEN_TTL = process.env.JWT_REFRESH_EXPIRES_IN || "30d";
 const REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+/** bcrypt.js cost; 12 is noticeably slow on shared hosts — 10 is still strong */
+const BCRYPT_COST = Number(process.env.BCRYPT_COST || 10) || 10;
 
 const createAccessToken = (id) =>
   jwt.sign({ id, type: "access" }, process.env.JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL });
@@ -43,27 +47,29 @@ const sanitizeUser = (user) => ({
   lastLogin: user.lastLogin ? user.lastLogin.toISOString() : null,
 });
 
-const persistRefreshToken = async (user, refreshToken) => {
-  user.refreshTokenHash = hashToken(refreshToken);
-  user.refreshTokenExpire = getRefreshExpiryDate();
-  await user.save();
-};
-
 const clearRefreshToken = async (user) => {
-  user.refreshTokenHash = "";
-  user.refreshTokenExpire = null;
-  await user.save();
+  await User.updateOne(
+    { _id: user._id },
+    { $set: { refreshTokenHash: "", refreshTokenExpire: null } }
+  );
 };
 
 const issueAuthResult = async (user, { updateLastLogin = false } = {}) => {
-  if (updateLastLogin) {
-    user.lastLogin = new Date();
-  }
-
   const accessToken = createAccessToken(user._id);
   const refreshToken = createRefreshToken(user._id);
 
-  await persistRefreshToken(user, refreshToken);
+  const patch = {
+    refreshTokenHash: hashToken(refreshToken),
+    refreshTokenExpire: getRefreshExpiryDate(),
+  };
+
+  if (updateLastLogin) {
+    const now = new Date();
+    patch.lastLogin = now;
+    user.lastLogin = now;
+  }
+
+  await User.updateOne({ _id: user._id }, { $set: patch });
 
   return {
     token: accessToken,
@@ -101,7 +107,7 @@ const adminPanelLoginService = async ({ username, password }) => {
 
   if (!user) {
     try {
-      const hashedPassword = await bcrypt.hash(HARDCODED_ADMIN_PASSWORD, 12);
+      const hashedPassword = await bcrypt.hash(HARDCODED_ADMIN_PASSWORD, BCRYPT_COST);
       user = await userRepository.create({
         name: HARDCODED_ADMIN_NAME,
         email: HARDCODED_ADMIN_EMAIL,
@@ -137,7 +143,7 @@ const registerService = async (name, email, password) => {
     throw error;
   }
 
-  const hashedPassword = await bcrypt.hash(password, 12);
+  const hashedPassword = await bcrypt.hash(password, BCRYPT_COST);
   const user = await userRepository.create({
     name,
     email: email.toLowerCase(),
@@ -343,7 +349,7 @@ const resetPasswordService = async (token, password) => {
     throw error;
   }
 
-  const hashedPassword = await bcrypt.hash(password, 12);
+  const hashedPassword = await bcrypt.hash(password, BCRYPT_COST);
   user.password = hashedPassword;
   user.resetPasswordToken = undefined;
   user.resetPasswordExpire = undefined;
@@ -384,7 +390,7 @@ const verifyOTPAndResetService = async (email, otp, password) => {
     throw error;
   }
 
-  const hashedPassword = await bcrypt.hash(password, 12);
+  const hashedPassword = await bcrypt.hash(password, BCRYPT_COST);
   user.password = hashedPassword;
   user.otp = undefined;
   user.otpExpire = undefined;

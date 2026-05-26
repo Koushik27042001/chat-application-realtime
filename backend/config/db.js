@@ -8,6 +8,8 @@ const connectDB = async() => {
 
         const conn = await mongoose.connect(process.env.MONGO_URI, {
             dbName: "chat-app",
+            maxPoolSize: 10,
+            serverSelectionTimeoutMS: 15000,
         });
 
         console.log(`✅ MongoDB Connected: ${conn.connection.host}`);

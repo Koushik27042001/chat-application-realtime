@@ -1,12 +1,15 @@
 const REFRESH_COOKIE_NAME = "chat_refresh_token";
 
-const getRefreshCookieOptions = () => {
-  const isProduction = process.env.NODE_ENV === "production";
+/** Render may omit NODE_ENV; respect RENDER_EXTERNAL_URL so cross-site cookies work (Vercel → Render). */
+const isDeployed =
+  process.env.NODE_ENV === "production" ||
+  !!(process.env.RENDER_EXTERNAL_URL || process.env.RENDER);
 
+const getRefreshCookieOptions = () => {
   return {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
+    secure: isDeployed,
+    sameSite: isDeployed ? "none" : "lax",
     path: "/api/auth",
     maxAge: 30 * 24 * 60 * 60 * 1000,
   };
