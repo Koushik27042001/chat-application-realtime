@@ -1,4 +1,6 @@
 const mongoose = require("mongoose");
+const { applyMongoDnsFromEnv } = require("./mongoDns");
+applyMongoDnsFromEnv();
 
 const connectDB = async() => {
     try {
