@@ -133,6 +133,12 @@ export const messageApi = {
       `/messages?conversationId=${conversationId}&page=${page}&limit=${limit}`,
       createAuthConfig(token)
     ),
+  markRead: (token, conversationId) =>
+    apiClient.patch(
+      "/messages/read",
+      { conversationId },
+      createAuthConfig(token)
+    ),
   send: (token, payload) =>
     apiClient.post("/messages", payload, createAuthConfig(token)),
 };

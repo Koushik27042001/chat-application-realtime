@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Avatar from "../components/chat/Avatar";
@@ -8,7 +8,9 @@ import MessageBubble from "../components/chat/MessageBubble";
 import MessageInput from "../components/chat/MessageInput";
 import SearchBar from "../components/chat/SearchBar";
 import { useAuth } from "../context/AuthContext";
+import useNotifications from "../hooks/useNotifications";
 import useSocket from "../hooks/useSocket";
+import useWebRTCCall from "../hooks/useWebRTCCall";
 import { conversationApi, messageApi, userApi } from "../services/api";
 import {
   normalizeContact,
@@ -16,6 +18,8 @@ import {
   prepareAvatarForUpload,
   upsertContact,
 } from "./chat/helpers";
+import NotificationsBell from "../components/chat/NotificationsBell.jsx";
+import ChatCallOverlay from "./chat/ChatCallOverlay.jsx";
 import { chatPageStyles } from "./chat/styles";
 
 const formatCallDuration = (totalSeconds) => {
@@ -47,15 +51,34 @@ export default function Chat() {
   const [mounted, setMounted] = useState(false);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
   const [avatarFeedback, setAvatarFeedback] = useState("");
-  const [activeVideoCall, setActiveVideoCall] = useState(null);
+  const [partnerTyping, setPartnerTyping] = useState(false);
   const [callDurationSeconds, setCallDurationSeconds] = useState(0);
 
   const activeChatIdRef = useRef(null);
   const contactsRef = useRef([]);
+  const threadRef = useRef({ peerId: null, convId: null });
+  const socketRef = useRef(null);
+  const partnerTypingHideTimerRef = useRef(null);
+  const typingThrottleRef = useRef(0);
+  const typingAutoStopRef = useRef(null);
+  const markIncomingReadTimerRef = useRef(null);
+  const prevTypingTargetRef = useRef(null);
   const messagesEndRef = useRef(null);
   const avatarInputRef = useRef(null);
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+  const remoteAudioRef = useRef(null);
 
   const searchQuery = searchTerm.trim();
+
+  const {
+    notifications,
+    unreadCount,
+    refreshNotifications,
+    ingestNotificationFromSocket,
+    markNotificationRead,
+    markAllNotificationsRead,
+  } = useNotifications(token);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -65,25 +88,6 @@ export default function Chat() {
     const timeoutId = setTimeout(() => setMounted(true), 60);
     return () => clearTimeout(timeoutId);
   }, []);
-
-  useEffect(() => {
-    if (!activeVideoCall?.startedAt) {
-      setCallDurationSeconds(0);
-      return undefined;
-    }
-
-    const syncDuration = () => {
-      const elapsed = Math.max(
-        0,
-        Math.floor((Date.now() - new Date(activeVideoCall.startedAt).getTime()) / 1000)
-      );
-      setCallDurationSeconds(elapsed);
-    };
-
-    syncDuration();
-    const intervalId = setInterval(syncDuration, 1000);
-    return () => clearInterval(intervalId);
-  }, [activeVideoCall]);
 
   const handleSelectContact = (contact) => {
     const normalized = normalizeContact(contact);
@@ -99,6 +103,28 @@ export default function Chat() {
       setSearchTerm("");
       setDirectoryResults([]);
     }
+  };
+
+  const handleOpenFromNotification = async (notification) => {
+    if (notification?.type === "CALL") {
+      return;
+    }
+    const sid =
+      notification?.meta?.senderId ?? notification?.meta?.sender?.toString?.();
+    if (!sid || !token) {
+      return;
+    }
+    const id = String(sid);
+    let contact = contactsRef.current.find((c) => c.id === id);
+    if (!contact) {
+      try {
+        const { data } = await userApi.get(token, id);
+        contact = normalizeContact(data);
+      } catch {
+        contact = normalizeContact({ id, name: "User" });
+      }
+    }
+    handleSelectContact(contact);
   };
 
   const handleIncomingMessage = async (message) => {
@@ -131,13 +157,115 @@ export default function Chat() {
 
     if (activeChatIdRef.current === senderId) {
       setMessages((current) => [...current, normalizeMessage(message, user?.id)]);
+      const cid =
+        message.conversationId?.toString?.() ??
+        contactsRef.current.find((c) => c.id === senderId)?.conversationId;
+      if (cid && token) {
+        window.clearTimeout(markIncomingReadTimerRef.current);
+        markIncomingReadTimerRef.current = window.setTimeout(async () => {
+          try {
+            await messageApi.markRead(token, cid);
+            socketRef.current?.emit("read-receipt", {
+              receiverId: senderId,
+              conversationId: cid,
+            });
+          } catch {
+            /* ignore */
+          }
+        }, 420);
+      }
     }
   };
+
+  const onRemoteTyping = useCallback((payload) => {
+    if (String(payload?.fromUserId) !== String(threadRef.current.peerId) || !threadRef.current.peerId) {
+      return;
+    }
+    setPartnerTyping(true);
+    window.clearTimeout(partnerTypingHideTimerRef.current);
+    partnerTypingHideTimerRef.current = window.setTimeout(() => setPartnerTyping(false), 3500);
+  }, []);
+
+  const onRemoteStopTyping = useCallback((payload) => {
+    if (String(payload?.fromUserId) !== String(threadRef.current.peerId)) return;
+    setPartnerTyping(false);
+  }, []);
+
+  const onConversationReadEvt = useCallback((payload) => {
+    const { peerId, convId } = threadRef.current;
+    if (!convId || !peerId || !payload?.conversationId || !payload?.readByUserId) return;
+    if (String(payload.conversationId) !== String(convId)) return;
+    if (String(payload.readByUserId) !== String(peerId)) return;
+    setMessages((prev) => prev.map((m) => (m.own ? { ...m, status: "seen" } : m)));
+  }, []);
 
   const { socket, isConnected, onlineUsers } = useSocket({
     userId: user?.id,
     onMessage: handleIncomingMessage,
+    onNotification: ingestNotificationFromSocket,
+    onTyping: onRemoteTyping,
+    onStopTyping: onRemoteStopTyping,
+    onConversationRead: onConversationReadEvt,
   });
+
+  useEffect(() => {
+    socketRef.current = socket;
+  }, [socket]);
+
+  const rtc = useWebRTCCall(socket, user?.id);
+
+  useEffect(() => {
+    const startedAt = rtc.session?.startedAt;
+    if (!startedAt) {
+      setCallDurationSeconds(0);
+      return undefined;
+    }
+
+    const syncDuration = () => {
+      const elapsed = Math.max(
+        0,
+        Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)
+      );
+      setCallDurationSeconds(elapsed);
+    };
+
+    syncDuration();
+    const intervalId = setInterval(syncDuration, 1000);
+    return () => clearInterval(intervalId);
+  }, [rtc.session?.startedAt]);
+
+  useEffect(() => {
+    const el = localVideoRef.current;
+    if (!el) return;
+    el.srcObject = rtc.localStream || null;
+    return () => {
+      el.srcObject = null;
+    };
+  }, [rtc.localStream]);
+
+  useEffect(() => {
+    const el = remoteVideoRef.current;
+    if (!el) return;
+    el.srcObject = rtc.remoteStream || null;
+    return () => {
+      el.srcObject = null;
+    };
+  }, [rtc.remoteStream]);
+
+  useEffect(() => {
+    const el = remoteAudioRef.current;
+    if (!el) return;
+    el.srcObject = rtc.remoteStream || null;
+    return () => {
+      el.srcObject = null;
+    };
+  }, [rtc.remoteStream]);
+
+  useEffect(() => {
+    if (!rtc.banner) return;
+    const timer = window.setTimeout(() => rtc.clearBanner(), 5600);
+    return () => window.clearTimeout(timer);
+  }, [rtc.banner, rtc.clearBanner]);
 
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
@@ -145,7 +273,19 @@ export default function Chat() {
 
   useEffect(() => {
     contactsRef.current = contacts;
-  }, [contacts]);
+    const c = contacts.find((row) => row.id === activeChatId);
+    threadRef.current = { peerId: activeChatId, convId: c?.conversationId ?? null };
+  }, [contacts, activeChatId]);
+
+  useEffect(() => {
+    const s = socketRef.current;
+    const prevPeer = prevTypingTargetRef.current;
+    if (s && prevPeer && activeChatId && prevPeer !== activeChatId) {
+      s.emit("stop-typing", { receiverId: prevPeer });
+    }
+    prevTypingTargetRef.current = activeChatId;
+    setPartnerTyping(false);
+  }, [activeChatId]);
 
   useEffect(() => {
     if (!token) {
@@ -272,27 +412,102 @@ export default function Chat() {
     filteredContacts[0] ||
     contacts[0];
 
-  const isVideoCallActive = Boolean(
-    activeContact && activeVideoCall?.contactId === activeContact.id && activeVideoCall?.startedAt
-  );
-  const callDurationLabel = formatCallDuration(callDurationSeconds);
-
-  const handleToggleVideoCall = () => {
-    if (!activeContact) {
+  useEffect(() => {
+    if (
+      !token ||
+      !socket ||
+      !activeChatId ||
+      !activeContact?.conversationId ||
+      String(activeContact.id) !== String(activeChatId)
+    ) {
       return;
     }
 
-    setActiveVideoCall((current) => {
-      if (current?.contactId === activeContact.id) {
-        return null;
-      }
+    let cancelled = false;
+    const { id: pid, conversationId: cid } = activeContact;
 
-      return {
-        contactId: activeContact.id,
-        startedAt: new Date().toISOString(),
-      };
-    });
+    const t = window.setTimeout(async () => {
+      try {
+        await messageApi.markRead(token, cid);
+        if (cancelled) return;
+        socket.emit("read-receipt", { receiverId: pid, conversationId: cid });
+      } catch {
+        /* ignore */
+      }
+    }, 420);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [token, socket, activeChatId, activeContact?.id, activeContact?.conversationId]);
+
+  const lastOwnMessageId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i]?.own) return messages[i].id;
+    }
+    return null;
+  }, [messages]);
+
+  const scheduleTypingPing = useCallback(() => {
+    const s = socketRef.current;
+    const peerId = threadRef.current.peerId;
+    if (!s || !peerId) return;
+    const now = Date.now();
+    if (now - typingThrottleRef.current > 2100) {
+      s.emit("typing", { receiverId: peerId });
+      typingThrottleRef.current = now;
+    }
+    window.clearTimeout(typingAutoStopRef.current);
+    typingAutoStopRef.current = window.setTimeout(() => {
+      s.emit("stop-typing", { receiverId: peerId });
+    }, 2600);
+  }, []);
+
+  const flushTypingStop = useCallback(() => {
+    const s = socketRef.current;
+    const peerId = threadRef.current.peerId;
+    if (!s || !peerId) return;
+    window.clearTimeout(typingAutoStopRef.current);
+    s.emit("stop-typing", { receiverId: peerId });
+  }, []);
+
+  const callPeerId = rtc.incoming?.from ?? rtc.session?.peerId ?? null;
+
+  const callPeerContact = useMemo(() => {
+    if (!callPeerId) return null;
+    const merged = [...contacts, ...directoryResults];
+    return merged.find((c) => String(c.id) === String(callPeerId)) || null;
+  }, [callPeerId, contacts, directoryResults]);
+
+  const callPeerName =
+    callPeerContact?.name || (callPeerId ? `User ${callPeerId}` : "");
+
+  const headerCallMatches =
+    activeContact &&
+    rtc.session &&
+    String(rtc.session.peerId) === String(activeContact.id);
+
+  const headerCallMode =
+    headerCallMatches && rtc.session.callType === "voice"
+      ? "voice"
+      : headerCallMatches
+        ? "video"
+        : null;
+
+  const callDurationLabel = formatCallDuration(callDurationSeconds);
+
+  const handleToggleVideoCall = () => {
+    activeContact?.id && rtc.toggleVideoCall(activeContact.id);
   };
+
+  const handleToggleVoiceCall = () => {
+    activeContact?.id && rtc.toggleVoiceCall(activeContact.id);
+  };
+
+  const isIncomingVideo =
+    rtc.incoming != null && rtc.incoming.callType !== "audio";
+  const isActiveVideoSession = rtc.session?.callType === "video";
 
   const handleSend = async (text) => {
     if (!token || !activeContact) {
@@ -393,6 +608,33 @@ export default function Chat() {
   return (
     <>
       <style>{chatPageStyles}</style>
+
+      {rtc.banner ? (
+        <div
+          role="status"
+          style={{
+            position: "fixed",
+            top: 18,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 400,
+            padding: "0.55rem 1rem",
+            borderRadius: "999px",
+            fontSize: "0.78rem",
+            fontWeight: 600,
+            maxWidth: "min(90vw, 420px)",
+            textAlign: "center",
+            background:
+              rtc.banner.type === "error"
+                ? "rgba(239,68,68,0.95)"
+                : "rgba(30,41,59,0.92)",
+            color: "#fefce8",
+            boxShadow: "0 14px 40px rgba(0,0,0,0.2)",
+          }}
+        >
+          {rtc.banner.msg}
+        </div>
+      ) : null}
 
       <div className="chat-root">
         {sidebarOpen ? <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} /> : null}
@@ -531,14 +773,24 @@ export default function Chat() {
               </div>
             </div>
 
-            <button className="logout-btn" onClick={handleLogout}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-              Sign out
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+              <NotificationsBell
+                notifications={notifications}
+                unreadCount={unreadCount}
+                onRefresh={refreshNotifications}
+                onMarkRead={(id, wasUnread) => markNotificationRead(id, wasUnread)}
+                onMarkAllRead={markAllNotificationsRead}
+                onOpenFromNotification={(n) => void handleOpenFromNotification(n)}
+              />
+              <button className="logout-btn" onClick={handleLogout}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+                Sign out
+              </button>
+            </div>
           </div>
 
           {activeContact ? (
@@ -546,9 +798,11 @@ export default function Chat() {
               <ChatHeader
                 activeContact={activeContact}
                 online={onlineSet.has(String(activeContact.id))}
-                isVideoCallActive={isVideoCallActive}
+                partnerTyping={partnerTyping}
+                callMode={headerCallMode}
                 callDurationLabel={callDurationLabel}
                 onToggleVideoCall={handleToggleVideoCall}
+                onToggleVoiceCall={handleToggleVoiceCall}
               />
 
               <div className="messages-area">
@@ -558,12 +812,24 @@ export default function Chat() {
                     No messages yet. Say hello!
                   </div>
                 ) : (
-                  messages.map((message) => <MessageBubble key={message.id} message={message} />)
+                  messages.map((message) => (
+                    <MessageBubble
+                      key={message.id}
+                      message={message}
+                      readReceipt={
+                        message.own && message.id === lastOwnMessageId
+                          ? message.status === "seen"
+                            ? "Seen"
+                            : "Sent"
+                          : null
+                      }
+                    />
+                  ))
                 )}
                 <div ref={messagesEndRef} />
               </div>
 
-              <MessageInput onSend={handleSend} />
+              <MessageInput onSend={handleSend} onTypingActivity={scheduleTypingPing} onTypingBlur={flushTypingStop} />
             </>
           ) : (
             <div className="empty-state">
@@ -573,6 +839,18 @@ export default function Chat() {
             </div>
           )}
         </div>
+
+        <ChatCallOverlay
+          rtc={rtc}
+          localVideoRef={localVideoRef}
+          remoteVideoRef={remoteVideoRef}
+          remoteAudioRef={remoteAudioRef}
+          callPeerName={callPeerName}
+          callPeerContact={callPeerContact}
+          callDurationSeconds={callDurationSeconds}
+          isIncomingVideo={isIncomingVideo}
+          isActiveVideoSession={isActiveVideoSession}
+        />
       </div>
     </>
   );

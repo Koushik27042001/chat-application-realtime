@@ -11,7 +11,18 @@ const findByConversation = (conversationId, options = {}) => {
     .lean();
 };
 
+const markAsSeenForReceiver = (conversationId, receiverId) =>
+  Message.updateMany(
+    {
+      conversationId,
+      receiver: receiverId,
+      status: { $nin: ["seen"] },
+    },
+    { $set: { status: "seen" } }
+  );
+
 module.exports = {
   create,
   findByConversation,
+  markAsSeenForReceiver,
 };

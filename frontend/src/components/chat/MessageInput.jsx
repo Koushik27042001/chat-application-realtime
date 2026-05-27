@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { EMOJI_GROUPS } from "../../pages/chat/helpers";
 
-export default function MessageInput({ onSend }) {
+export default function MessageInput({ onSend, onTypingActivity, onTypingBlur }) {
   const [text, setText] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const textareaRef = useRef(null);
@@ -35,6 +35,7 @@ export default function MessageInput({ onSend }) {
     onSend(trimmed);
     setText("");
     setShowEmojiPicker(false);
+    onTypingBlur?.();
   };
 
   const handleKeyDown = (event) => {
@@ -83,7 +84,13 @@ export default function MessageInput({ onSend }) {
         ref={textareaRef}
         rows={1}
         value={text}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => {
+          const next = event.target.value;
+          setText(next);
+          if (next.trim()) {
+            onTypingActivity?.();
+          }
+        }}
         onKeyDown={handleKeyDown}
         placeholder="Type a message..."
         style={{
@@ -110,6 +117,7 @@ export default function MessageInput({ onSend }) {
           event.target.style.borderColor = "rgba(255,122,89,0.14)";
           event.target.style.boxShadow = "0 10px 26px rgba(203, 162, 132, 0.08)";
           event.target.style.background = "rgba(255,255,255,0.92)";
+          onTypingBlur?.();
         }}
       />
       <button

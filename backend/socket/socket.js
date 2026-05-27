@@ -68,29 +68,27 @@ const initializeSocket = (io) => {
             }
         });
 
-        // ✅ MESSAGE SEEN (NEW 🔥)
-        socket.on("mark-seen", ({ conversationId, userId }) => {
-            socket.broadcast.emit("message-seen", {
-                conversationId,
-                userId,
-            });
-        });
-
-        // ✅ TYPING INDICATOR (NEW 🔥)
+        // ✅ TYPING (with sender id for UI)
         socket.on("typing", ({ receiverId }) => {
-            const receiverSocketId = onlineUsers.get(String(receiverId));
-
-            if (receiverSocketId) {
-                io.to(receiverSocketId).emit("typing");
-            }
+            const from = socket.data?.userId;
+            if (!receiverId || !from) return;
+            emitToUser(io, String(receiverId), "typing", { fromUserId: String(from) });
         });
 
         socket.on("stop-typing", ({ receiverId }) => {
-            const receiverSocketId = onlineUsers.get(String(receiverId));
+            const from = socket.data?.userId;
+            if (!receiverId || !from) return;
+            emitToUser(io, String(receiverId), "stop-typing", { fromUserId: String(from) });
+        });
 
-            if (receiverSocketId) {
-                io.to(receiverSocketId).emit("stop-typing");
-            }
+        /** Real-time read receipt (persist via REST PATCH /api/messages/read first) */
+        socket.on("read-receipt", ({ receiverId, conversationId }) => {
+            const from = socket.data?.userId;
+            if (!receiverId || !conversationId || !from) return;
+            emitToUser(io, String(receiverId), "conversation-read", {
+                conversationId: String(conversationId),
+                readByUserId: String(from),
+            });
         });
 
         // ✅ CALL SIGNALING (WEBRTC)

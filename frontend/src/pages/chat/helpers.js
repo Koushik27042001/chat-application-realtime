@@ -93,14 +93,16 @@ export const formatTime = (value) =>
   new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 export const normalizeMessage = (message, currentUserId) => {
-  const senderId = message.sender?.toString?.() ?? message.sender;
+  const senderId = String(message.sender?.toString?.() ?? message.sender ?? "");
+  const me = String(currentUserId ?? "");
 
   return {
     id: message._id || message.id || `msg-${Date.now()}`,
     text: message.content,
     sender: senderId,
-    own: senderId === currentUserId,
+    own: senderId === me,
     time: formatTime(message.createdAt || new Date()),
+    status: message.status || "sent",
   };
 };
 

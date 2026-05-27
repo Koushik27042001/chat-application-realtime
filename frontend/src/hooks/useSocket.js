@@ -9,13 +9,9 @@ const useSocket = ({
   userId,
   onMessage,
   onNotification,
-  onCallIncoming,
-  onCallAccepted,
-  onCallDeclined,
-  onCallEnded,
-  onCallIce,
-  onCallBusy,
-  onCallUnavailable,
+  onTyping,
+  onStopTyping,
+  onConversationRead,
 } = {}) => {
   const [isConnected, setIsConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -23,38 +19,20 @@ const useSocket = ({
   const handlersRef = useRef({
     onMessage,
     onNotification,
-    onCallIncoming,
-    onCallAccepted,
-    onCallDeclined,
-    onCallEnded,
-    onCallIce,
-    onCallBusy,
-    onCallUnavailable,
+    onTyping,
+    onStopTyping,
+    onConversationRead,
   });
 
   useEffect(() => {
     handlersRef.current = {
       onMessage,
       onNotification,
-      onCallIncoming,
-      onCallAccepted,
-      onCallDeclined,
-      onCallEnded,
-      onCallIce,
-      onCallBusy,
-      onCallUnavailable,
+      onTyping,
+      onStopTyping,
+      onConversationRead,
     };
-  }, [
-    onMessage,
-    onNotification,
-    onCallIncoming,
-    onCallAccepted,
-    onCallDeclined,
-    onCallEnded,
-    onCallIce,
-    onCallBusy,
-    onCallUnavailable,
-  ]);
+  }, [onMessage, onNotification, onTyping, onStopTyping, onConversationRead]);
 
   useEffect(() => {
     if (hasAttemptedRef.current) {
@@ -101,38 +79,22 @@ const useSocket = ({
         handlersRef.current.onNotification?.(payload);
       });
 
-      socket.on("call:incoming", (payload) => {
-        handlersRef.current.onCallIncoming?.(payload);
+      socket.on("typing", (payload) => {
+        handlersRef.current.onTyping?.(payload);
       });
 
-      socket.on("call:accepted", (payload) => {
-        handlersRef.current.onCallAccepted?.(payload);
+      socket.on("stop-typing", (payload) => {
+        handlersRef.current.onStopTyping?.(payload);
       });
 
-      socket.on("call:declined", (payload) => {
-        handlersRef.current.onCallDeclined?.(payload);
-      });
-
-      socket.on("call:ended", (payload) => {
-        handlersRef.current.onCallEnded?.(payload);
-      });
-
-      socket.on("call:ice", (payload) => {
-        handlersRef.current.onCallIce?.(payload);
-      });
-
-      socket.on("call:busy", (payload) => {
-        handlersRef.current.onCallBusy?.(payload);
-      });
-
-      socket.on("call:unavailable", (payload) => {
-        handlersRef.current.onCallUnavailable?.(payload);
+      socket.on("conversation-read", (payload) => {
+        handlersRef.current.onConversationRead?.(payload);
       });
 
       socket.on("online-users", (users) => {
         setOnlineUsers(Array.isArray(users) ? users : []);
       });
-    } catch (error) {
+    } catch (_error) {
       setIsConnected(false);
     }
 
@@ -144,13 +106,9 @@ const useSocket = ({
         socket.off("reconnect");
         socket.off("receive-message");
         socket.off("notification");
-        socket.off("call:incoming");
-        socket.off("call:accepted");
-        socket.off("call:declined");
-        socket.off("call:ended");
-        socket.off("call:ice");
-        socket.off("call:busy");
-        socket.off("call:unavailable");
+        socket.off("typing");
+        socket.off("stop-typing");
+        socket.off("conversation-read");
         socket.off("online-users");
         socket.disconnect();
         socket = undefined;

@@ -1,4 +1,4 @@
-export default function MessageBubble({ message }) {
+export default function MessageBubble({ message, readReceipt = null }) {
   return (
     <div
       style={{
@@ -46,6 +46,19 @@ export default function MessageBubble({ message }) {
           }}
         >
           {message.time}
+          {readReceipt ? (
+            <span
+              style={{
+                marginLeft: "0.45rem",
+                fontWeight: 600,
+                fontSize: "0.58rem",
+                letterSpacing: "0.04em",
+                opacity: readReceipt === "Seen" ? 0.95 : 0.75,
+              }}
+            >
+              {readReceipt}
+            </span>
+          ) : null}
         </p>
       </div>
     </div>

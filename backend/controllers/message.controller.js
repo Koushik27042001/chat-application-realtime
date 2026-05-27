@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const asyncHandler = require("../utils/asyncHandler");
 const ApiResponse = require("../utils/apiResponse");
-const { sendMessageService, getMessagesService } = require("../services/message.service");
+const { sendMessageService, getMessagesService, markConversationReadService } = require("../services/message.service");
 
 const sendMessage = asyncHandler(async (req, res) => {
   const { receiverId, content } = req.body;
@@ -39,7 +39,34 @@ const getMessages = asyncHandler(async (req, res) => {
   );
 });
 
+const markMessagesRead = asyncHandler(async (req, res) => {
+  const { conversationId } = req.body || {};
+
+  if (!conversationId) {
+    return res
+      .status(400)
+      .json(new ApiResponse(400, "conversationId is required"));
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+    return res.status(400).json(new ApiResponse(400, "Invalid conversationId"));
+  }
+
+  try {
+    await markConversationReadService(req.user.id, conversationId);
+    return res
+      .status(200)
+      .json(new ApiResponse(200, "Messages marked as read", { conversationId }));
+  } catch (error) {
+    const code = error.statusCode || 500;
+    return res
+      .status(code)
+      .json(new ApiResponse(code, error.message || "Failed to mark messages as read"));
+  }
+});
+
 module.exports = {
   sendMessage,
   getMessages,
+  markMessagesRead,
 };
