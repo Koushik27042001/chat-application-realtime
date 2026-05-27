@@ -33,6 +33,8 @@ export default function useWebRTCCall(socket, localUserId) {
   const pcRef = useRef(null);
   const iceQueueRef = useRef([]);
   const localStreamRef = useRef(null);
+  const ringIntervalRef = useRef(null);
+  const ringAudioCtxRef = useRef(null);
 
   const [incoming, setIncoming] = useState(null);
   /** @type {{ peerId: string, callType: 'video'|'voice', phase: string, role: string, startedAt: string } | null} */
@@ -49,7 +51,57 @@ export default function useWebRTCCall(socket, localUserId) {
     setLocalStream(stream);
   }, []);
 
+  const stopRinging = useCallback(() => {
+    if (ringIntervalRef.current) {
+      window.clearInterval(ringIntervalRef.current);
+      ringIntervalRef.current = null;
+    }
+    if (ringAudioCtxRef.current) {
+      ringAudioCtxRef.current.close().catch(() => {});
+      ringAudioCtxRef.current = null;
+    }
+  }, []);
+
+  const ringBeep = useCallback((frequency = 790, durationMs = 190) => {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!ringAudioCtxRef.current || ringAudioCtxRef.current.state === "closed") {
+      ringAudioCtxRef.current = new Ctx();
+    }
+    const ctx = ringAudioCtxRef.current;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = frequency;
+    gain.gain.value = 0.0001;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const now = ctx.currentTime;
+    gain.gain.exponentialRampToValueAtTime(0.06, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + durationMs / 1000);
+    osc.start(now);
+    osc.stop(now + durationMs / 1000);
+  }, []);
+
+  const startRinging = useCallback(
+    (mode = "outgoing") => {
+      stopRinging();
+      if (mode === "incoming") {
+        ringBeep(910, 240);
+        ringIntervalRef.current = window.setInterval(() => ringBeep(910, 240), 900);
+        return;
+      }
+      ringBeep(690, 170);
+      ringIntervalRef.current = window.setInterval(() => {
+        ringBeep(690, 170);
+        window.setTimeout(() => ringBeep(760, 170), 260);
+      }, 1700);
+    },
+    [ringBeep, stopRinging]
+  );
+
   const teardown = useCallback(() => {
+    stopRinging();
     stopTracks(localStreamRef.current);
     localStreamRef.current = null;
     setLocalStream(null);
@@ -62,7 +114,7 @@ export default function useWebRTCCall(socket, localUserId) {
     setRemoteStream(null);
     setMicEnabledUi(true);
     setCameraEnabledUi(true);
-  }, []);
+  }, [stopRinging]);
 
   const syncMediaUiFromStream = useCallback((stream) => {
     const a = stream?.getAudioTracks?.()?.[0];
@@ -200,12 +252,22 @@ export default function useWebRTCCall(socket, localUserId) {
           phase: "ringing",
           startedAt,
         });
+        startRinging("outgoing");
       } catch (e) {
         setBanner({ type: "error", msg: e?.message || "Could not start call." });
         teardown();
       }
     },
-    [socket, localId, acquireMedia, createPc, setLocalMedia, teardown, syncMediaUiFromStream]
+    [
+      socket,
+      localId,
+      acquireMedia,
+      createPc,
+      setLocalMedia,
+      teardown,
+      syncMediaUiFromStream,
+      startRinging,
+    ]
   );
 
   const declineIncoming = useCallback(() => {
@@ -214,8 +276,9 @@ export default function useWebRTCCall(socket, localUserId) {
       return;
     }
     socket.emit("call:decline", { to: incoming.from, from: localId });
+    stopRinging();
     setIncoming(null);
-  }, [socket, incoming, localId]);
+  }, [socket, incoming, localId, stopRinging]);
 
   const acceptIncoming = useCallback(async () => {
     if (!socket || !incoming || !localId) return;
@@ -223,6 +286,7 @@ export default function useWebRTCCall(socket, localUserId) {
     const voice = callType === "audio";
     const sessionType = voice ? "voice" : "video";
 
+    stopRinging();
     setIncoming(null);
 
     teardown();
@@ -278,6 +342,7 @@ export default function useWebRTCCall(socket, localUserId) {
     setLocalMedia,
     teardown,
     syncMediaUiFromStream,
+    stopRinging,
   ]);
 
   const onCallIncoming = useCallback(
@@ -292,8 +357,9 @@ export default function useWebRTCCall(socket, localUserId) {
         offer: payload.offer,
         callType: payload.callType || "video",
       });
+      startRinging("incoming");
     },
-    [session, incoming, socket, localId]
+    [session, incoming, socket, localId, startRinging]
   );
 
   const onCallAccepted = useCallback(
@@ -303,6 +369,7 @@ export default function useWebRTCCall(socket, localUserId) {
       try {
         await pc.setRemoteDescription(new RTCSessionDescription(answer));
         await flushIceQueue();
+        stopRinging();
         setSession((prev) =>
           prev && prev.peerId === String(from)
             ? { ...prev, phase: "active" }
@@ -313,32 +380,38 @@ export default function useWebRTCCall(socket, localUserId) {
         hangUp();
       }
     },
-    [flushIceQueue, hangUp]
+    [flushIceQueue, hangUp, stopRinging]
   );
 
   const onCallDeclined = useCallback(
     ({ from }) => {
       if (peerIdRef.current && String(from) === String(peerIdRef.current)) {
+        stopRinging();
         setBanner({ type: "notice", msg: "Call declined." });
         teardown();
       }
     },
-    [teardown]
+    [teardown, stopRinging]
   );
 
   const onCallEnded = useCallback(
     ({ from }) => {
       const pid = peerIdRef.current ?? session?.peerId;
       if (pid != null && String(from) === String(pid)) {
+        stopRinging();
         teardown();
       }
     },
-    [session?.peerId, teardown]
+    [session?.peerId, teardown, stopRinging]
   );
 
   const onCallIce = useCallback(
     async ({ from, candidate }) => {
-      if (!candidate || String(from) !== peerIdRef.current) return;
+      if (!candidate || !from) return;
+      const fromId = String(from);
+      const currentPeer = peerIdRef.current;
+      if (currentPeer && fromId !== currentPeer) return;
+      if (!currentPeer && incoming?.from && fromId !== String(incoming.from)) return;
       const pc = pcRef.current;
       if (!pc?.remoteDescription) {
         iceQueueRef.current.push(candidate);
@@ -346,23 +419,25 @@ export default function useWebRTCCall(socket, localUserId) {
       }
       await safeAddIce(candidate);
     },
-    [safeAddIce]
+    [safeAddIce, incoming?.from]
   );
 
   const onCallBusy = useCallback(
     ({ from }) => {
       if (peerIdRef.current && String(from) === String(peerIdRef.current)) {
+        stopRinging();
         setBanner({ type: "notice", msg: "User is busy." });
         teardown();
       }
     },
-    [teardown]
+    [teardown, stopRinging]
   );
 
   const onCallUnavailable = useCallback(() => {
+    stopRinging();
     setBanner({ type: "notice", msg: "User is offline." });
     teardown();
-  }, [teardown]);
+  }, [teardown, stopRinging]);
 
   const toggleVideoCall = useCallback(
     (activeContactId) => {
@@ -430,6 +505,8 @@ export default function useWebRTCCall(socket, localUserId) {
     onCallBusy,
     onCallUnavailable,
   ]);
+
+  useEffect(() => () => stopRinging(), [stopRinging]);
 
   return {
     incoming,

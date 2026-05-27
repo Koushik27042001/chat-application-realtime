@@ -166,6 +166,8 @@ export default function ChatCallOverlay({
             <p style={{ marginTop: "0.25rem", fontSize: "0.82rem", color: "#94a3b8" }}>
               {rtc.incoming
                 ? `Incoming ${rtc.incoming.callType === "audio" ? "voice" : "video"} call`
+                : rtc.session?.phase === "ringing"
+                  ? "Ringing…"
                 : rtc.session?.callType === "voice"
                   ? "Voice call in progress"
                   : null}

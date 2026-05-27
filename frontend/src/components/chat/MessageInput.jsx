@@ -1,6 +1,61 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { EMOJI_GROUPS } from "../../pages/chat/helpers";
+
+const PICKER_GAP = 10;
+const EDGE = 12;
+
+function useEmojiPickerPosition(open, anchorRef, panelRef) {
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 320, maxHeight: 360 });
+
+  const recalc = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor || !open) return;
+
+    const rect = anchor.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const width = Math.max(260, Math.min(340, vw - EDGE * 2));
+    const panelH = panelRef.current?.offsetHeight || 360;
+    const maxHeight = Math.min(400, vh - EDGE * 2);
+
+    let left = rect.right - width;
+    if (left < EDGE) left = EDGE;
+    if (left + width > vw - EDGE) left = vw - EDGE - width;
+
+    const spaceAbove = rect.top - EDGE - PICKER_GAP;
+    const spaceBelow = vh - rect.bottom - EDGE - PICKER_GAP;
+
+    let top;
+    let height = Math.min(maxHeight, Math.max(220, panelH));
+
+    if (spaceAbove >= 200 || spaceAbove >= spaceBelow) {
+      top = Math.max(EDGE, rect.top - height - PICKER_GAP);
+      height = Math.min(height, rect.top - EDGE - PICKER_GAP);
+    } else {
+      top = rect.bottom + PICKER_GAP;
+      height = Math.min(height, spaceBelow);
+    }
+
+    setPos({ top, left, width, maxHeight: height });
+  }, [open, anchorRef, panelRef]);
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    recalc();
+    const raf = requestAnimationFrame(recalc);
+    window.addEventListener("resize", recalc);
+    window.addEventListener("scroll", recalc, true);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", recalc);
+      window.removeEventListener("scroll", recalc, true);
+    };
+  }, [open, recalc]);
+
+  return pos;
+}
 
 export default function MessageInput({ onSend, onTypingActivity, onTypingBlur }) {
   const [text, setText] = useState("");
@@ -8,19 +63,11 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
   const textareaRef = useRef(null);
   const pickerRef = useRef(null);
   const triggerRef = useRef(null);
+  const rootRef = useRef(null);
+  const panelPos = useEmojiPickerPosition(showEmojiPicker, triggerRef, pickerRef);
 
   useEffect(() => {
-    if (!showEmojiPicker) {
-      return undefined;
-    }
-
-    const handlePointerDown = (event) => {
-      const target = event.target;
-      if (pickerRef.current?.contains(target) || triggerRef.current?.contains(target)) {
-        return;
-      }
-      setShowEmojiPicker(false);
-    };
+    if (!showEmojiPicker) return undefined;
 
     const onKeyDown = (event) => {
       if (event.key === "Escape") {
@@ -28,11 +75,23 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
       }
     };
 
-    document.addEventListener("mousedown", handlePointerDown);
+    const onPointerDown = (event) => {
+      const target = event.target;
+      if (
+        pickerRef.current?.contains(target) ||
+        triggerRef.current?.contains(target) ||
+        rootRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setShowEmojiPicker(false);
+    };
+
     document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("mousedown", onPointerDown);
     return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("mousedown", onPointerDown);
     };
   }, [showEmojiPicker]);
 
@@ -63,7 +122,6 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
       return;
     }
 
-    /** Use live DOM value so several emojis in one burst never use stale state */
     const value = textarea.value;
     const start = textarea.selectionStart ?? value.length;
     const end = textarea.selectionEnd ?? value.length;
@@ -78,17 +136,70 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
     });
   };
 
+  const pickerPanel = showEmojiPicker ? (
+    <div
+      ref={pickerRef}
+      className="emoji-picker-panel"
+      role="dialog"
+      aria-label="Emoji picker"
+      style={{
+        position: "fixed",
+        top: panelPos.top,
+        left: panelPos.left,
+        width: panelPos.width,
+        maxHeight: panelPos.maxHeight,
+        zIndex: 10060,
+      }}
+    >
+      <div className="emoji-picker-panel__header">
+        <p className="emoji-picker-panel__title">Emojis</p>
+        <button
+          type="button"
+          className="emoji-picker-panel__close"
+          aria-label="Close emoji picker"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => setShowEmojiPicker(false)}
+        >
+          ×
+        </button>
+      </div>
+      <p className="emoji-picker-panel__hint">
+        Tap as many as you like — they insert at your cursor. Close with ×, Escape, or click outside.
+      </p>
+      <div className="emoji-picker-panel__scroll">
+        {EMOJI_GROUPS.map((group) => (
+          <div key={group.label} className="emoji-picker-panel__group">
+            <p className="emoji-picker-panel__group-label">{group.label}</p>
+            <div className="emoji-picker-panel__grid">
+              {group.items.map((emoji) => (
+                <button
+                  key={`${group.label}-${emoji}`}
+                  type="button"
+                  className="emoji-picker-panel__emoji-btn"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => insertEmoji(emoji)}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div
+      ref={rootRef}
+      className="message-input-glass"
       style={{
         position: "relative",
+        zIndex: showEmojiPicker ? 3 : 1,
         padding: "1rem 1.15rem 1.1rem",
         display: "flex",
         gap: "0.7rem",
         alignItems: "flex-end",
-        borderTop: "1px solid rgba(255,122,89,0.1)",
-        background: "linear-gradient(180deg, rgba(255,250,245,0.78), rgba(255,255,255,0.9))",
-        backdropFilter: "blur(16px)",
       }}
     >
       <textarea
@@ -180,97 +291,9 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
         </svg>
       </button>
 
-      {showEmojiPicker ? (
-        <div
-          ref={pickerRef}
-          style={{
-            position: "absolute",
-            right: "1rem",
-            bottom: "calc(100% + 0.6rem)",
-            width: "min(320px, calc(100vw - 2rem))",
-            padding: "0.95rem",
-            borderRadius: "1.2rem",
-            border: "1px solid rgba(255,255,255,0.85)",
-            background: "rgba(255,250,245,0.96)",
-            backdropFilter: "blur(20px)",
-            boxShadow: "0 22px 54px rgba(161, 111, 77, 0.18)",
-            zIndex: 30,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.65rem", marginBottom: "0.35rem" }}>
-            <p style={{ fontFamily: "'Syne', sans-serif", fontSize: "0.84rem", color: "#243143", fontWeight: 700, flex: 1 }}>
-              Emojis
-            </p>
-            <button
-              type="button"
-              aria-label="Close emoji picker"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setShowEmojiPicker(false)}
-              style={{
-                flexShrink: 0,
-                width: 28,
-                height: 28,
-                borderRadius: "0.6rem",
-                border: "1px solid rgba(255,122,89,0.18)",
-                background: "rgba(255,255,255,0.9)",
-                color: "#8b6a57",
-                cursor: "pointer",
-                fontSize: "1rem",
-                lineHeight: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              ×
-            </button>
-          </div>
-          <p style={{ fontSize: "0.72rem", color: "#8e9aa8", marginBottom: "0.8rem", lineHeight: 1.45 }}>
-            Tap as many as you like — they insert at your cursor. Close here, press Escape, or tap outside.
-          </p>
-          {EMOJI_GROUPS.map((group) => (
-            <div key={group.label} style={{ marginTop: "0.72rem" }}>
-              <p style={{ fontSize: "0.68rem", color: "#d07d57", marginBottom: "0.45rem", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 800 }}>
-                {group.label}
-              </p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: "0.48rem" }}>
-                {group.items.map((emoji) => (
-                  <button
-                    key={`${group.label}-${emoji}`}
-                    type="button"
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                    }}
-                    onClick={() => insertEmoji(emoji)}
-                    style={{
-                      height: 44,
-                      borderRadius: "0.9rem",
-                      border: "1px solid rgba(255,255,255,0.88)",
-                      background: "rgba(255,255,255,0.82)",
-                      fontSize: "1.15rem",
-                      cursor: "pointer",
-                      transition: "transform 0.15s, background 0.15s, border-color 0.15s",
-                      boxShadow: "0 10px 18px rgba(203, 162, 132, 0.08)",
-                    }}
-                    onMouseEnter={(event) => {
-                      event.currentTarget.style.transform = "translateY(-1px)";
-                      event.currentTarget.style.background = "#fff4ee";
-                      event.currentTarget.style.borderColor = "rgba(255,122,89,0.22)";
-                    }}
-                    onMouseLeave={(event) => {
-                      event.currentTarget.style.transform = "translateY(0)";
-                      event.currentTarget.style.background = "rgba(255,255,255,0.82)";
-                      event.currentTarget.style.borderColor = "rgba(255,255,255,0.88)";
-                    }}
-                  >
-                    {emoji}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
+      {typeof document !== "undefined" && pickerPanel
+        ? createPortal(pickerPanel, document.body)
+        : null}
     </div>
   );
 }
