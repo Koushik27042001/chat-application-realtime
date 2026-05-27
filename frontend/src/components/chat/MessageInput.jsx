@@ -22,8 +22,18 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
       setShowEmojiPicker(false);
     };
 
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setShowEmojiPicker(false);
+      }
+    };
+
     document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [showEmojiPicker]);
 
   const submit = () => {
@@ -53,13 +63,14 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
       return;
     }
 
-    const start = textarea.selectionStart ?? text.length;
-    const end = textarea.selectionEnd ?? text.length;
-    const nextText = `${text.slice(0, start)}${emoji}${text.slice(end)}`;
+    /** Use live DOM value so several emojis in one burst never use stale state */
+    const value = textarea.value;
+    const start = textarea.selectionStart ?? value.length;
+    const end = textarea.selectionEnd ?? value.length;
+    const nextText = `${value.slice(0, start)}${emoji}${value.slice(end)}`;
     const nextCaret = start + emoji.length;
 
     setText(nextText);
-    setShowEmojiPicker(false);
 
     requestAnimationFrame(() => {
       textarea.focus();
@@ -123,7 +134,7 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
       <button
         ref={triggerRef}
         type="button"
-        aria-label="Open emoji picker"
+        aria-label={showEmojiPicker ? "Close emoji picker" : "Open emoji picker"}
         aria-expanded={showEmojiPicker}
         onClick={() => setShowEmojiPicker((current) => !current)}
         style={{
@@ -186,11 +197,36 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
             zIndex: 30,
           }}
         >
-          <p style={{ fontFamily: "'Syne', sans-serif", fontSize: "0.84rem", color: "#243143", marginBottom: "0.2rem" }}>
-            Add emoji
-          </p>
-          <p style={{ fontSize: "0.72rem", color: "#8e9aa8", marginBottom: "0.8rem" }}>
-            Pick one to insert it at your cursor.
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.65rem", marginBottom: "0.35rem" }}>
+            <p style={{ fontFamily: "'Syne', sans-serif", fontSize: "0.84rem", color: "#243143", fontWeight: 700, flex: 1 }}>
+              Emojis
+            </p>
+            <button
+              type="button"
+              aria-label="Close emoji picker"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setShowEmojiPicker(false)}
+              style={{
+                flexShrink: 0,
+                width: 28,
+                height: 28,
+                borderRadius: "0.6rem",
+                border: "1px solid rgba(255,122,89,0.18)",
+                background: "rgba(255,255,255,0.9)",
+                color: "#8b6a57",
+                cursor: "pointer",
+                fontSize: "1rem",
+                lineHeight: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              ×
+            </button>
+          </div>
+          <p style={{ fontSize: "0.72rem", color: "#8e9aa8", marginBottom: "0.8rem", lineHeight: 1.45 }}>
+            Tap as many as you like — they insert at your cursor. Close here, press Escape, or tap outside.
           </p>
           {EMOJI_GROUPS.map((group) => (
             <div key={group.label} style={{ marginTop: "0.72rem" }}>
@@ -202,6 +238,9 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
                   <button
                     key={`${group.label}-${emoji}`}
                     type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                    }}
                     onClick={() => insertEmoji(emoji)}
                     style={{
                       height: 44,

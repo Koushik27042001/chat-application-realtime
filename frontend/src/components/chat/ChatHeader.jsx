@@ -25,7 +25,14 @@ export default function ChatHeader({
         <p className="chat-contact-name">{activeContact.name}</p>
         <p className={`chat-contact-status ${online ? "online" : ""}`}>
           {partnerTyping ? (
-            <span style={{ fontStyle: "italic", color: "#d56d47" }}>Typing…</span>
+            <span className="chat-typing-line">
+              Typing
+              <span className="chat-typing-dots">
+                <span />
+                <span />
+                <span />
+              </span>
+            </span>
           ) : online ? (
             "Active now"
           ) : (

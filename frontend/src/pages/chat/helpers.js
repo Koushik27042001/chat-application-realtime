@@ -102,7 +102,7 @@ export const normalizeMessage = (message, currentUserId) => {
     sender: senderId,
     own: senderId === me,
     time: formatTime(message.createdAt || new Date()),
-    status: message.status || "sent",
+    status: String(message.status || "sent").toLowerCase(),
   };
 };
 

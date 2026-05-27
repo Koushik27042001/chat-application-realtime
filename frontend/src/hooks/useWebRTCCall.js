@@ -6,6 +6,24 @@ const stopTracks = (stream) => {
   stream?.getTracks?.().forEach((t) => t.stop());
 };
 
+const formatGetUserMediaErrorMessage = (e) => {
+  const name = e?.name || "";
+  let msg = e?.message || "Microphone/camera permission denied.";
+  if (
+    typeof window !== "undefined" &&
+    !window.isSecureContext &&
+    !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname || "")
+  ) {
+    msg =
+      "Camera/mic need a secure origin. Use https:// or open via http://localhost (not a raw LAN IP over HTTP).";
+  } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    msg = "No camera or microphone was found. Check device settings.";
+  } else if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+    msg = "Permission blocked — allow camera/mic for this site in the browser.";
+  }
+  return msg;
+};
+
 /**
  * Minimal WebRTC 1:1 calls over Socket.io signaling (see backend/socket/socket.js).
  */
@@ -22,6 +40,9 @@ export default function useWebRTCCall(socket, localUserId) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [banner, setBanner] = useState(null);
+  /** Mirrors actual MediaStreamTrack.enabled for in-call toolbar */
+  const [micEnabledUi, setMicEnabledUi] = useState(true);
+  const [cameraEnabledUi, setCameraEnabledUi] = useState(true);
 
   const setLocalMedia = useCallback((stream) => {
     localStreamRef.current = stream;
@@ -39,6 +60,15 @@ export default function useWebRTCCall(socket, localUserId) {
     setIncoming(null);
     setSession(null);
     setRemoteStream(null);
+    setMicEnabledUi(true);
+    setCameraEnabledUi(true);
+  }, []);
+
+  const syncMediaUiFromStream = useCallback((stream) => {
+    const a = stream?.getAudioTracks?.()?.[0];
+    const v = stream?.getVideoTracks?.()?.[0];
+    setMicEnabledUi(a ? a.enabled : true);
+    setCameraEnabledUi(v ? v.enabled : true);
   }, []);
 
   const safeAddIce = useCallback(async (candidate) => {
@@ -82,8 +112,36 @@ export default function useWebRTCCall(socket, localUserId) {
     const audioOnly = kind === "voice" || kind === "audio";
     const constraints = audioOnly
       ? { audio: true, video: false }
-      : { audio: true, video: { facingMode: "user" } };
-    return navigator.mediaDevices.getUserMedia(constraints);
+      : {
+          audio: true,
+          video: {
+            facingMode: { ideal: "user" },
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
+        };
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (e1) {
+      if (audioOnly) throw e1;
+      return navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    }
+  }, []);
+
+  const toggleMicMuted = useCallback(() => {
+    const stream = localStreamRef.current;
+    const track = stream?.getAudioTracks?.()?.[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    setMicEnabledUi(track.enabled);
+  }, []);
+
+  const toggleCameraEnabled = useCallback(() => {
+    const stream = localStreamRef.current;
+    const track = stream?.getVideoTracks?.()?.[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    setCameraEnabledUi(track.enabled);
   }, []);
 
   const hangUp = useCallback(() => {
@@ -114,12 +172,13 @@ export default function useWebRTCCall(socket, localUserId) {
       } catch (e) {
         setBanner({
           type: "error",
-          msg: e?.message || "Microphone/camera permission denied.",
+          msg: formatGetUserMediaErrorMessage(e),
         });
         peerIdRef.current = null;
         return;
       }
       setLocalMedia(stream);
+      syncMediaUiFromStream(stream);
 
       const pc = createPc();
       stream.getTracks().forEach((t) => pc.addTrack(t, stream));
@@ -146,7 +205,7 @@ export default function useWebRTCCall(socket, localUserId) {
         teardown();
       }
     },
-    [socket, localId, acquireMedia, createPc, setLocalMedia, teardown]
+    [socket, localId, acquireMedia, createPc, setLocalMedia, teardown, syncMediaUiFromStream]
   );
 
   const declineIncoming = useCallback(() => {
@@ -174,13 +233,14 @@ export default function useWebRTCCall(socket, localUserId) {
     } catch (e) {
       setBanner({
         type: "error",
-        msg: e?.message || "Microphone/camera permission denied.",
+        msg: formatGetUserMediaErrorMessage(e),
       });
       socket.emit("call:decline", { to: from, from: localId });
       peerIdRef.current = null;
       return;
     }
     setLocalMedia(stream);
+    syncMediaUiFromStream(stream);
 
     const pc = createPc();
     stream.getTracks().forEach((t) => pc.addTrack(t, stream));
@@ -217,6 +277,7 @@ export default function useWebRTCCall(socket, localUserId) {
     flushIceQueue,
     setLocalMedia,
     teardown,
+    syncMediaUiFromStream,
   ]);
 
   const onCallIncoming = useCallback(
@@ -381,6 +442,10 @@ export default function useWebRTCCall(socket, localUserId) {
     acceptIncoming,
     declineIncoming,
     hangUp,
+    toggleMicMuted,
+    toggleCameraEnabled,
+    micEnabled: micEnabledUi,
+    cameraEnabled: cameraEnabledUi,
     toggleVideoCall,
     toggleVoiceCall,
   };

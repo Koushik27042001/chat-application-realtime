@@ -6,6 +6,8 @@
     <title>Chat Application</title>
   </head>
   <body>
+    <!-- Full-viewport layer: rain renders here (below #root) so it stays visible behind the chat UI -->
+    <div id="chat-rain-root" aria-hidden="true"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

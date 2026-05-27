@@ -1,6 +1,6 @@
 export default function SearchBar({ value, onChange }) {
   return (
-    <div style={{ position: "relative", margin: "0.8rem 0.85rem 0.1rem" }}>
+    <div className="sidebar-search-host" style={{ position: "relative", margin: "0.8rem 0.85rem 0.1rem" }}>
       <svg
         style={{
           position: "absolute",

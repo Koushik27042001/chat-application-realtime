@@ -12,6 +12,19 @@ const formatElapsed = (totalSeconds) => {
   return `${paddedMinutes}:${paddedSeconds}`;
 };
 
+const ctlBtnStyle = {
+  width: 50,
+  height: 50,
+  borderRadius: "50%",
+  border: "2px solid rgba(255,255,255,0.12)",
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  transition: "transform 0.15s, background 0.15s, border-color 0.15s",
+  flexShrink: 0,
+};
+
 export default function ChatCallOverlay({
   rtc,
   localVideoRef,
@@ -24,6 +37,22 @@ export default function ChatCallOverlay({
   isActiveVideoSession,
 }) {
   if (!rtc.incoming && !rtc.session) return null;
+
+  const hasLocalStream = Boolean(rtc.localStream);
+  const showVideoStage = isActiveVideoSession || (rtc.incoming && isIncomingVideo);
+  const showVoicePanel =
+    rtc.session?.callType === "voice" || (rtc.incoming && !isIncomingVideo);
+
+  const showRemotePlaceholder =
+    (rtc.incoming && isIncomingVideo) ||
+    (!rtc.remoteStream &&
+      rtc.session?.role === "caller" &&
+      rtc.session?.phase === "ringing" &&
+      rtc.session?.callType === "video");
+
+  const showMediaControls = hasLocalStream && !rtc.incoming;
+  const showCameraToggle =
+    showMediaControls && (rtc.session?.callType === "video" || rtc.localStream?.getVideoTracks?.()?.length > 0);
 
   return (
     <div
@@ -54,11 +83,11 @@ export default function ChatCallOverlay({
           position: "relative",
         }}
       >
-        {(isActiveVideoSession || (rtc.incoming && isIncomingVideo)) && (
+        {showVideoStage ? (
           <div
             style={{
               flex: 1,
-              minHeight: 220,
+              minHeight: 240,
               position: "relative",
               background: "#020617",
             }}
@@ -73,9 +102,31 @@ export default function ChatCallOverlay({
                 minHeight: 280,
                 objectFit: "cover",
                 background: "#020617",
+                display: "block",
               }}
             />
-            {!rtc.incoming && (
+
+            {showRemotePlaceholder ? (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 4,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#e2e8f0",
+                  fontSize: "0.95rem",
+                  fontWeight: 700,
+                  background: "rgba(15,23,42,0.55)",
+                  pointerEvents: "none",
+                }}
+              >
+                {rtc.incoming ? "Incoming video call" : "Ringing…"}
+              </div>
+            ) : null}
+
+            {!rtc.incoming ? (
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -84,44 +135,25 @@ export default function ChatCallOverlay({
                 style={{
                   position: "absolute",
                   right: 16,
-                  bottom: 76,
-                  width: 132,
-                  height: 176,
+                  bottom: 100,
+                  width: 140,
+                  height: 186,
                   objectFit: "cover",
                   borderRadius: 16,
-                  border: "2px solid rgba(255,255,255,0.2)",
+                  border: "2px solid rgba(255,255,255,0.25)",
                   boxShadow: "0 14px 32px rgba(0,0,0,0.45)",
                   background: "#0f172a",
+                  zIndex: 12,
                 }}
               />
-            )}
-            {(rtc.incoming && isIncomingVideo) ||
-            (!rtc.remoteStream &&
-              rtc.session?.role === "caller" &&
-              rtc.session?.phase === "ringing") ? (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#94a3b8",
-                  fontSize: "0.9rem",
-                  fontWeight: 600,
-                  background: "rgba(15,23,42,0.42)",
-                }}
-              >
-                {rtc.incoming ? "Incoming video call" : "Ringing…"}
-              </div>
             ) : null}
           </div>
-        )}
+        ) : null}
 
-        {(rtc.session?.callType === "voice" || (rtc.incoming && !isIncomingVideo)) && (
+        {showVoicePanel ? (
           <div
             style={{
-              flex: "0 1 auto",
+              flex: showVideoStage ? "0 1 auto" : 1,
               padding: rtc.incoming ? "3rem 1.5rem 1.75rem" : "2rem 1.5rem 1rem",
               textAlign: "center",
               color: "#e2e8f0",
@@ -140,20 +172,21 @@ export default function ChatCallOverlay({
             </p>
             <audio ref={remoteAudioRef} autoPlay playsInline style={{ width: 0, height: 0, opacity: 0 }} />
           </div>
-        )}
+        ) : null}
 
         <div
           style={{
             display: "flex",
             flexWrap: "wrap",
-            gap: 10,
+            gap: 12,
             justifyContent: "center",
             alignItems: "center",
-            padding: "12px 16px 16px",
+            padding: "14px 16px 18px",
             borderTop:
-              isActiveVideoSession || (rtc.incoming && isIncomingVideo)
+              showVideoStage || (rtc.incoming && isIncomingVideo)
                 ? "1px solid rgba(148,163,184,0.14)"
                 : "none",
+            background: "rgba(15,23,42,0.35)",
           }}
         >
           {rtc.incoming ? (
@@ -162,12 +195,12 @@ export default function ChatCallOverlay({
                 type="button"
                 onClick={() => rtc.acceptIncoming()}
                 style={{
-                  padding: "0.6rem 1.25rem",
+                  padding: "0.65rem 1.35rem",
                   borderRadius: 999,
                   border: "none",
                   cursor: "pointer",
                   fontWeight: 700,
-                  fontSize: "0.85rem",
+                  fontSize: "0.88rem",
                   background: "linear-gradient(135deg,#22c55e,#15803d)",
                   color: "#fff",
                 }}
@@ -178,12 +211,12 @@ export default function ChatCallOverlay({
                 type="button"
                 onClick={() => rtc.declineIncoming()}
                 style={{
-                  padding: "0.6rem 1.25rem",
+                  padding: "0.65rem 1.35rem",
                   borderRadius: 999,
                   border: "1px solid rgba(248,113,113,0.5)",
                   cursor: "pointer",
                   fontWeight: 700,
-                  fontSize: "0.85rem",
+                  fontSize: "0.88rem",
                   background: "transparent",
                   color: "#fca5a5",
                 }}
@@ -193,21 +226,88 @@ export default function ChatCallOverlay({
             </>
           ) : (
             <>
-              <span style={{ color: "#94a3b8", fontWeight: 600, fontSize: "0.8rem", marginRight: 6 }}>
+              <span
+                style={{
+                  color: "#94a3b8",
+                  fontWeight: 700,
+                  fontSize: "0.82rem",
+                  marginRight: 4,
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
                 {formatElapsed(callDurationSeconds)}
               </span>
+
+              {showMediaControls ? (
+                <>
+                  <button
+                    type="button"
+                    title={rtc.micEnabled ? "Mute microphone" : "Unmute microphone"}
+                    onClick={() => rtc.toggleMicMuted()}
+                    style={{
+                      ...ctlBtnStyle,
+                      background: rtc.micEnabled ? "rgba(255,255,255,0.1)" : "rgba(239,68,68,0.35)",
+                      borderColor: rtc.micEnabled ? "rgba(255,255,255,0.15)" : "rgba(252,165,165,0.5)",
+                      color: "#f8fafc",
+                    }}
+                  >
+                    {rtc.micEnabled ? (
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z" />
+                        <path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8" />
+                      </svg>
+                    ) : (
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <line x1="2" y1="2" x2="22" y2="22" />
+                        <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-5-2.2" />
+                        <path d="M12 18v4M8 22h8" />
+                        <path d="M16 10v1a4 4 0 0 1-5.2 3.8" />
+                      </svg>
+                    )}
+                  </button>
+
+                  {showCameraToggle ? (
+                    <button
+                      type="button"
+                      title={rtc.cameraEnabled ? "Turn camera off" : "Turn camera on"}
+                      onClick={() => rtc.toggleCameraEnabled()}
+                      style={{
+                        ...ctlBtnStyle,
+                        background: rtc.cameraEnabled ? "rgba(255,255,255,0.1)" : "rgba(239,68,68,0.35)",
+                        borderColor: rtc.cameraEnabled ? "rgba(255,255,255,0.15)" : "rgba(252,165,165,0.5)",
+                        color: "#f8fafc",
+                      }}
+                    >
+                      {rtc.cameraEnabled ? (
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                          <path d="M15 10l4.553-2.069A1 1 0 0 1 21 8.87v6.26a1 1 0 0 1-1.447.9L15 14" />
+                          <path d="M3 8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8z" />
+                        </svg>
+                      ) : (
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                          <path d="M2 6l21 21" />
+                          <path d="M3.6 9H9a4 4 0 0 1 4 4v8" />
+                          <path d="M15 10l4.6-2.1A1 1 0 0 1 21 8.87v6.26" />
+                        </svg>
+                      )}
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+
               <button
                 type="button"
                 onClick={() => rtc.hangUp()}
                 style={{
-                  padding: "0.6rem 1.35rem",
+                  padding: "0.65rem 1.45rem",
                   borderRadius: 999,
                   border: "none",
                   cursor: "pointer",
                   fontWeight: 800,
-                  fontSize: "0.85rem",
+                  fontSize: "0.88rem",
                   background: "linear-gradient(135deg,#ef4444,#b91c1c)",
                   color: "#fff",
+                  boxShadow: "0 8px 24px rgba(220,38,38,0.35)",
                 }}
               >
                 End call

@@ -3,38 +3,10 @@ import Avatar from "./Avatar";
 export default function ContactRow({ contact, active, onClick, online }) {
   return (
     <button
+      type="button"
+      className="contact-row-btn"
+      data-active={active ? "true" : "false"}
       onClick={() => onClick(contact)}
-      style={{
-        width: "100%",
-        textAlign: "left",
-        display: "flex",
-        alignItems: "center",
-        gap: "0.8rem",
-        padding: "0.82rem 0.9rem",
-        borderRadius: "1.25rem",
-        background: active
-          ? "linear-gradient(135deg, rgba(255,122,89,0.16), rgba(255,186,120,0.22))"
-          : "rgba(255,255,255,0.68)",
-        border: active
-          ? "1px solid rgba(255,122,89,0.28)"
-          : "1px solid rgba(255,255,255,0.72)",
-        cursor: "pointer",
-        transition: "all 0.18s",
-        marginBottom: "0.35rem",
-        boxShadow: active ? "0 14px 30px rgba(255,122,89,0.14)" : "0 10px 20px rgba(190, 153, 128, 0.08)",
-      }}
-      onMouseEnter={(event) => {
-        if (!active) {
-          event.currentTarget.style.background = "rgba(255,255,255,0.92)";
-          event.currentTarget.style.transform = "translateY(-1px)";
-        }
-      }}
-      onMouseLeave={(event) => {
-        if (!active) {
-          event.currentTarget.style.background = "rgba(255,255,255,0.68)";
-          event.currentTarget.style.transform = "translateY(0)";
-        }
-      }}
     >
       <Avatar name={contact.name} size={42} online={online} src={contact.avatar} />
       <div style={{ flex: 1, minWidth: 0 }}>

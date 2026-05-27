@@ -1,3 +1,25 @@
+function formatReadReceipt(readReceipt) {
+  if (!readReceipt) return null;
+  if (readReceipt === "Seen") {
+    return (
+      <>
+        <span aria-hidden style={{ marginRight: "0.2rem", letterSpacing: "-0.12em", opacity: 0.95 }}>
+          ✓✓
+        </span>
+        Seen
+      </>
+    );
+  }
+  return (
+    <>
+      <span aria-hidden style={{ marginRight: "0.2rem", opacity: 0.9 }}>
+        ✓
+      </span>
+      Sent
+    </>
+  );
+}
+
 export default function MessageBubble({ message, readReceipt = null }) {
   return (
     <div
@@ -49,14 +71,14 @@ export default function MessageBubble({ message, readReceipt = null }) {
           {readReceipt ? (
             <span
               style={{
-                marginLeft: "0.45rem",
-                fontWeight: 600,
-                fontSize: "0.58rem",
-                letterSpacing: "0.04em",
-                opacity: readReceipt === "Seen" ? 0.95 : 0.75,
+                marginLeft: "0.5rem",
+                fontWeight: 700,
+                fontSize: "0.68rem",
+                letterSpacing: "0.06em",
+                opacity: message.own ? 0.95 : 1,
               }}
             >
-              {readReceipt}
+              {formatReadReceipt(readReceipt)}
             </span>
           ) : null}
         </p>

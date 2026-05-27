@@ -18,6 +18,7 @@ import {
   prepareAvatarForUpload,
   upsertContact,
 } from "./chat/helpers";
+import ChatPageRain from "../components/chat/ChatPageRain.jsx";
 import NotificationsBell from "../components/chat/NotificationsBell.jsx";
 import ChatCallOverlay from "./chat/ChatCallOverlay.jsx";
 import { chatPageStyles } from "./chat/styles";
@@ -53,6 +54,7 @@ export default function Chat() {
   const [avatarFeedback, setAvatarFeedback] = useState("");
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [callDurationSeconds, setCallDurationSeconds] = useState(0);
+  const [showScrollJump, setShowScrollJump] = useState(false);
 
   const activeChatIdRef = useRef(null);
   const contactsRef = useRef([]);
@@ -64,6 +66,8 @@ export default function Chat() {
   const markIncomingReadTimerRef = useRef(null);
   const prevTypingTargetRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const messagesAreaRef = useRef(null);
+  const stickMessagesToBottomRef = useRef(true);
   const avatarInputRef = useRef(null);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -80,9 +84,56 @@ export default function Chat() {
     markAllNotificationsRead,
   } = useNotifications(token);
 
+  const updateJumpVisibility = useCallback(() => {
+    const el = messagesAreaRef.current;
+    if (!el) return;
+    const threshold = 88;
+    const distanceFromBottom = el.scrollHeight - el.clientHeight - el.scrollTop;
+    const pinned = distanceFromBottom <= threshold;
+    stickMessagesToBottomRef.current = pinned;
+    setShowScrollJump(distanceFromBottom > threshold && messages.length > 0);
+  }, [messages.length]);
+
   useEffect(() => {
+    if (stickMessagesToBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    const id = requestAnimationFrame(updateJumpVisibility);
+    return () => cancelAnimationFrame(id);
+  }, [messages, updateJumpVisibility]);
+
+  useEffect(() => {
+    const el = messagesAreaRef.current;
+    if (!el) return;
+    updateJumpVisibility();
+    el.addEventListener("scroll", updateJumpVisibility, { passive: true });
+    return () => el.removeEventListener("scroll", updateJumpVisibility);
+  }, [activeChatId, updateJumpVisibility]);
+
+  useEffect(() => {
+    const el = messagesAreaRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => updateJumpVisibility());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [activeChatId, updateJumpVisibility]);
+
+  useEffect(() => {
+    stickMessagesToBottomRef.current = true;
+    setShowScrollJump(false);
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      updateJumpVisibility();
+    });
+  }, [activeChatId, updateJumpVisibility]);
+
+  const scrollMessagesToLatest = useCallback(() => {
+    stickMessagesToBottomRef.current = true;
+    setShowScrollJump(false);
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    requestAnimationFrame(updateJumpVisibility);
+  }, [updateJumpVisibility]);
+
 
   useEffect(() => {
     const timeoutId = setTimeout(() => setMounted(true), 60);
@@ -238,6 +289,9 @@ export default function Chat() {
     const el = localVideoRef.current;
     if (!el) return;
     el.srcObject = rtc.localStream || null;
+    if (rtc.localStream) {
+      void el.play().catch(() => {});
+    }
     return () => {
       el.srcObject = null;
     };
@@ -247,6 +301,9 @@ export default function Chat() {
     const el = remoteVideoRef.current;
     if (!el) return;
     el.srcObject = rtc.remoteStream || null;
+    if (rtc.remoteStream) {
+      void el.play().catch(() => {});
+    }
     return () => {
       el.srcObject = null;
     };
@@ -256,6 +313,9 @@ export default function Chat() {
     const el = remoteAudioRef.current;
     if (!el) return;
     el.srcObject = rtc.remoteStream || null;
+    if (rtc.remoteStream) {
+      void el.play().catch(() => {});
+    }
     return () => {
       el.srcObject = null;
     };
@@ -454,7 +514,7 @@ export default function Chat() {
     const peerId = threadRef.current.peerId;
     if (!s || !peerId) return;
     const now = Date.now();
-    if (now - typingThrottleRef.current > 2100) {
+    if (now - typingThrottleRef.current > 750) {
       s.emit("typing", { receiverId: peerId });
       typingThrottleRef.current = now;
     }
@@ -636,6 +696,8 @@ export default function Chat() {
         </div>
       ) : null}
 
+      <ChatPageRain />
+
       <div className="chat-root">
         {sidebarOpen ? <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} /> : null}
 
@@ -698,35 +760,17 @@ export default function Chat() {
               />
               <button
                 type="button"
+                className="sidebar-foot-btn"
                 disabled={isSavingAvatar}
                 onClick={() => avatarInputRef.current?.click()}
-                style={{
-                  padding: "0.35rem 0.6rem",
-                  fontSize: "0.68rem",
-                  borderRadius: "0.5rem",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "#cbd5e1",
-                  cursor: isSavingAvatar ? "wait" : "pointer",
-                  opacity: isSavingAvatar ? 0.7 : 1,
-                }}
               >
                 {isSavingAvatar ? "Saving..." : "Upload"}
               </button>
               <button
                 type="button"
+                className="sidebar-foot-btn"
                 disabled={isSavingAvatar}
                 onClick={handleAutoAvatar}
-                style={{
-                  padding: "0.35rem 0.6rem",
-                  fontSize: "0.68rem",
-                  borderRadius: "0.5rem",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "#cbd5e1",
-                  cursor: isSavingAvatar ? "wait" : "pointer",
-                  opacity: isSavingAvatar ? 0.7 : 1,
-                }}
               >
                 Auto
               </button>
@@ -805,7 +849,7 @@ export default function Chat() {
                 onToggleVoiceCall={handleToggleVoiceCall}
               />
 
-              <div className="messages-area">
+              <div className="messages-area" ref={messagesAreaRef}>
                 <div className="date-sep">Today</div>
                 {messages.length === 0 ? (
                   <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#475569", fontSize: "0.8rem", marginTop: "3rem" }}>
@@ -818,7 +862,7 @@ export default function Chat() {
                       message={message}
                       readReceipt={
                         message.own && message.id === lastOwnMessageId
-                          ? message.status === "seen"
+                          ? String(message.status).toLowerCase() === "seen"
                             ? "Seen"
                             : "Sent"
                           : null
@@ -827,6 +871,19 @@ export default function Chat() {
                   ))
                 )}
                 <div ref={messagesEndRef} />
+                {showScrollJump ? (
+                  <button
+                    type="button"
+                    className="chat-scroll-jump"
+                    aria-label="Scroll to latest messages"
+                    title="Latest messages"
+                    onClick={scrollMessagesToLatest}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </button>
+                ) : null}
               </div>
 
               <MessageInput onSend={handleSend} onTypingActivity={scheduleTypingPing} onTypingBlur={flushTypingStop} />

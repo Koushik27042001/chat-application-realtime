@@ -14,4 +14,15 @@ body {
 
 #root {
   @apply min-h-screen;
+  position: relative;
+  z-index: 1;
+}
+
+/* Slot for chat rain (see Chat.jsx portal + styles.js .chat-page-rain) */
+#chat-rain-root {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
 }

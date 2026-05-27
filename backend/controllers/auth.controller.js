@@ -101,6 +101,11 @@ const adminPanelLogin = asyncHandler(async (req, res) => {
 
 const refreshSession = asyncHandler(async (req, res) => {
   const refreshToken = readCookie(req);
+  /** No cookie yet (first visit / logged out) — return 401 without throwing so logs stay clean */
+  if (!refreshToken) {
+    return res.status(401).json(new ApiResponse(401, "Refresh token is required"));
+  }
+
   const result = await refreshSessionService(refreshToken);
   attachRefreshCookie(res, result.refreshToken);
 
