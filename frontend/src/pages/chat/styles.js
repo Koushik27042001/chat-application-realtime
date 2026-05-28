@@ -415,16 +415,32 @@ export const chatPageStyles = `
   .sidebar-foot-btn:disabled { cursor: wait !important; opacity: 0.65; }
 
   @media (max-width: 640px) {
-    .chat-root { padding: 12px; }
+    /* Reduce spacing to prevent overflow on small devices */
+    .chat-root {
+      padding: 10px;
+      gap: 10px;
+    }
+
+    .topbar {
+      padding: 0.75rem 0.9rem;
+    }
+
+    .messages-area {
+      padding: 1rem 0.85rem;
+    }
+
+    /* Mobile sidebar as a drawer */
     .sidebar {
       position: fixed;
-      inset-y: 12px;
-      left: 12px;
-      transform: translateX(calc(-100% - 18px));
-      width: min(88vw, 320px);
+      inset-y: 10px;
+      left: 10px;
+      transform: translateX(calc(-100% - 10px));
+      width: min(86vw, 320px);
       box-shadow: 0 24px 70px rgba(135, 91, 64, 0.24);
+      border-radius: 22px;
     }
     .sidebar.open { transform: translateX(0); }
+
     .sidebar-overlay {
       position: fixed;
       inset: 0;
@@ -432,7 +448,14 @@ export const chatPageStyles = `
       z-index: 11;
       backdrop-filter: blur(6px);
     }
+
+    .mobile-menu-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 0.9rem;
+    }
   }
+
 
   .sidebar-header {
     padding: 1.25rem 1rem 0.7rem;
