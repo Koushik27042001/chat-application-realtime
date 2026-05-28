@@ -41,7 +41,7 @@ const initFirebaseAdmin = () => {
       : "";
 
   if (projectId && clientEmail && privateKey) {
-    console.log("✅ Firebase Admin: using environment variables");
+    console.log("Firebase Admin: using environment variables");
     admin.initializeApp({
       credential: admin.credential.cert({
         projectId,
@@ -60,7 +60,7 @@ const initFirebaseAdmin = () => {
       : path.join(process.cwd(), serviceAccountPath);
     if (fs.existsSync(resolvedPath)) {
       const serviceAccount = require(resolvedPath);
-      console.log("✅ Firebase Admin: using service account file");
+      console.log("Firebase Admin: using service account file");
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
       });

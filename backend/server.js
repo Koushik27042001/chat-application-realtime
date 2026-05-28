@@ -1,10 +1,13 @@
-require("dotenv").config();
+const path = require("path");
+
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const http = require("http");
 const { Server } = require("socket.io");
 
 const app = require("./app");
 const allowedOrigins = require("./config/allowedOrigins");
+const getCloudinaryConfig = require("./config/cloudinary");
 const connectDB = require("./config/db");
 const { initFirebaseAdmin } = require("./firebaseAdmin");
 const initializeSocket = require("./socket/socket");
@@ -63,6 +66,12 @@ const listenOnPort = (preferredPort) =>
 const startServer = async () => {
   try {
     initFirebaseAdmin();
+    const cloudinaryConfig = getCloudinaryConfig();
+    console.log(
+      cloudinaryConfig.isConfigured
+        ? `Cloudinary configured: ${cloudinaryConfig.cloudName}/${cloudinaryConfig.folder}`
+        : `Cloudinary missing: ${cloudinaryConfig.missing.join(", ")}`
+    );
     console.log("Connecting to MongoDB...");
     await connectDB();
 

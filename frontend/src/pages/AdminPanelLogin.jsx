@@ -116,7 +116,7 @@ const AdminPanelLogin = () => {
 
         <p className="mt-6 text-center text-xs text-slate-500">
           <Link to="/login" className="text-violet-400 hover:text-violet-300">
-            ← Public login
+            Public login
           </Link>
         </p>
       </div>

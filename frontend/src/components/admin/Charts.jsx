@@ -20,7 +20,7 @@ export default function Charts({ loginActivity = [] }) {
   const data =
     loginActivity.length > 0
       ? loginActivity
-      : [{ label: "—", logins: 0 }];
+      : [{ label: "-", logins: 0 }];
 
   return (
     <div className="min-w-0 rounded-2xl border border-violet-500/20 bg-slate-900/50 p-5 backdrop-blur-sm">

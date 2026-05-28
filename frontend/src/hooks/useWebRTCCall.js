@@ -19,7 +19,7 @@ const formatGetUserMediaErrorMessage = (e) => {
   } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
     msg = "No camera or microphone was found. Check device settings.";
   } else if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-    msg = "Permission blocked — allow camera/mic for this site in the browser.";
+    msg = "Permission blocked. Allow camera/mic for this site in the browser.";
   }
   return msg;
 };
@@ -210,7 +210,7 @@ export default function useWebRTCCall(socket, localUserId) {
   const startOutbound = useCallback(
     async (peerId, kind) => {
       if (!socket || !localId || !peerId) {
-        setBanner({ type: "error", msg: "Not connected — sign in and wait for Live." });
+        setBanner({ type: "error", msg: "Not connected. Sign in and wait for Live." });
         return;
       }
       const peer = String(peerId);

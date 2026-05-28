@@ -57,10 +57,18 @@ function useEmojiPickerPosition(open, anchorRef, panelRef) {
   return pos;
 }
 
-export default function MessageInput({ onSend, onTypingActivity, onTypingBlur }) {
+export default function MessageInput({
+  onSend,
+  onImageSelected,
+  onTypingActivity,
+  onTypingBlur,
+  disabled = false,
+  isUploadingImage = false,
+}) {
   const [text, setText] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const textareaRef = useRef(null);
+  const imageInputRef = useRef(null);
   const pickerRef = useRef(null);
   const triggerRef = useRef(null);
   const rootRef = useRef(null);
@@ -96,6 +104,10 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
   }, [showEmojiPicker]);
 
   const submit = () => {
+    if (disabled || isUploadingImage) {
+      return;
+    }
+
     const trimmed = text.trim();
     if (!trimmed) {
       return;
@@ -160,11 +172,11 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => setShowEmojiPicker(false)}
         >
-          ×
+          x
         </button>
       </div>
       <p className="emoji-picker-panel__hint">
-        Tap as many as you like — they insert at your cursor. Close with ×, Escape, or click outside.
+        Tap as many as you like. They insert at your cursor. Close with x, Escape, or click outside.
       </p>
       <div className="emoji-picker-panel__scroll">
         {EMOJI_GROUPS.map((group) => (
@@ -206,6 +218,7 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
         ref={textareaRef}
         rows={1}
         value={text}
+        disabled={disabled || isUploadingImage}
         onChange={(event) => {
           const next = event.target.value;
           setText(next);
@@ -242,6 +255,59 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
           onTypingBlur?.();
         }}
       />
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        style={{ display: "none" }}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            onImageSelected?.(file);
+          }
+          event.target.value = "";
+        }}
+      />
+      <button
+        type="button"
+        aria-label="Attach photo"
+        title="Attach photo"
+        disabled={disabled || isUploadingImage}
+        onClick={() => imageInputRef.current?.click()}
+        style={{
+          width: 46,
+          height: 46,
+          borderRadius: "1rem",
+          border: "1px solid rgba(31,182,166,0.18)",
+          background: isUploadingImage ? "rgba(31,182,166,0.14)" : "rgba(255,255,255,0.88)",
+          color: isUploadingImage ? "#14877a" : "#8b6a57",
+          cursor: disabled || isUploadingImage ? "wait" : "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          boxShadow: "0 10px 24px rgba(203, 162, 132, 0.1)",
+        }}
+      >
+        {isUploadingImage ? (
+          <span
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: "50%",
+              border: "2px solid rgba(20,135,122,0.25)",
+              borderTopColor: "#14877a",
+              animation: "spin 0.7s linear infinite",
+            }}
+          />
+        ) : (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <circle cx="8.5" cy="10.5" r="1.5" />
+            <path d="M21 15l-4.5-4.5L9 18" />
+          </svg>
+        )}
+      </button>
       <button
         ref={triggerRef}
         type="button"
@@ -270,6 +336,7 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
       <button
         type="button"
         onClick={submit}
+        disabled={disabled || isUploadingImage}
         style={{
           width: 48,
           height: 48,
@@ -277,7 +344,7 @@ export default function MessageInput({ onSend, onTypingActivity, onTypingBlur })
           flexShrink: 0,
           background: text.trim() ? "linear-gradient(135deg,#ff7a59,#ffb347)" : "rgba(255,255,255,0.75)",
           border: text.trim() ? "none" : "1px solid rgba(255,122,89,0.14)",
-          cursor: text.trim() ? "pointer" : "default",
+          cursor: text.trim() && !disabled && !isUploadingImage ? "pointer" : "default",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",

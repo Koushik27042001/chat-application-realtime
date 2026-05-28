@@ -11,11 +11,13 @@ import { useAuth } from "../context/AuthContext";
 import useNotifications from "../hooks/useNotifications";
 import useSocket from "../hooks/useSocket";
 import useWebRTCCall from "../hooks/useWebRTCCall";
-import { conversationApi, messageApi, userApi } from "../services/api";
+import { conversationApi, messageApi, uploadApi, userApi } from "../services/api";
 import {
   normalizeContact,
   normalizeMessage,
+  prepareChatImageForUpload,
   prepareAvatarForUpload,
+  isImageMessageContent,
   upsertContact,
 } from "./chat/helpers";
 import ChatPageRain from "../components/chat/ChatPageRain.jsx";
@@ -51,7 +53,9 @@ export default function Chat() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [avatarFeedback, setAvatarFeedback] = useState("");
+  const [imageUploadFeedback, setImageUploadFeedback] = useState("");
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [callDurationSeconds, setCallDurationSeconds] = useState(0);
   const [showScrollJump, setShowScrollJump] = useState(false);
@@ -180,6 +184,7 @@ export default function Chat() {
 
   const handleIncomingMessage = async (message) => {
     const senderId = String(message.sender?.toString?.() ?? message.sender ?? "");
+    const normalizedIncomingMessage = normalizeMessage(message, user?.id);
     let incomingContact = contactsRef.current.find((contact) => contact.id === senderId);
 
     if (!incomingContact && token && senderId) {
@@ -198,7 +203,7 @@ export default function Chat() {
           {
             ...incomingContact,
             conversationId: message.conversationId || incomingContact.conversationId,
-            lastMessage: message.content,
+            lastMessage: normalizedIncomingMessage.messageType === "image" ? "Photo" : normalizedIncomingMessage.text,
             lastMessageAt: message.createdAt || new Date().toISOString(),
           },
           { prepend: true }
@@ -207,7 +212,7 @@ export default function Chat() {
     }
 
     if (activeChatIdRef.current === senderId) {
-      setMessages((current) => [...current, normalizeMessage(message, user?.id)]);
+      setMessages((current) => [...current, normalizedIncomingMessage]);
       const cid =
         message.conversationId?.toString?.() ??
         contactsRef.current.find((c) => c.id === senderId)?.conversationId;
@@ -439,7 +444,16 @@ export default function Chat() {
         if (lastMessage) {
           setContacts((current) =>
             current.map((contact) =>
-              contact.id === activeChatId ? { ...contact, lastMessage: lastMessage.text } : contact
+              contact.id === activeChatId
+                ? {
+                    ...contact,
+                    lastMessage:
+                      lastMessage.messageType === "image" ||
+                      isImageMessageContent(lastMessage.text)
+                        ? "Photo"
+                        : lastMessage.text,
+                  }
+                : contact
             )
           );
         }
@@ -578,6 +592,7 @@ export default function Chat() {
       const { data } = await messageApi.send(token, {
         receiverId: activeContact.id,
         content: text,
+        messageType: "text",
       });
       const nextMessage = normalizeMessage(data.message, user?.id);
 
@@ -602,6 +617,55 @@ export default function Chat() {
         });
       }
     } catch {}
+  };
+
+  const handleImageSend = async (file) => {
+    if (!token || !activeContact || isUploadingImage) {
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setImageUploadFeedback("");
+
+    try {
+      const image = await prepareChatImageForUpload(file);
+      const { data: uploaded } = await uploadApi.image(token, image);
+      const { data } = await messageApi.send(token, {
+        receiverId: activeContact.id,
+        content: uploaded.url,
+        messageType: "image",
+      });
+      const nextMessage = normalizeMessage(data.message, user?.id);
+
+      setMessages((current) => [...current, nextMessage]);
+      setContacts((current) =>
+        upsertContact(
+          current,
+          {
+            ...activeContact,
+            lastMessage: "Photo",
+            conversationId: data.conversation?._id || activeContact.conversationId || null,
+            lastMessageAt: data.message?.createdAt || new Date().toISOString(),
+          },
+          { prepend: true }
+        )
+      );
+
+      if (socket) {
+        socket.emit("private-message", {
+          receiverId: activeContact.id,
+          message: data.message,
+        });
+      }
+    } catch (error) {
+      setImageUploadFeedback(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Could not send the selected photo."
+      );
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -886,7 +950,26 @@ export default function Chat() {
                 ) : null}
               </div>
 
-              <MessageInput onSend={handleSend} onTypingActivity={scheduleTypingPing} onTypingBlur={flushTypingStop} />
+              {imageUploadFeedback ? (
+                <p
+                  style={{
+                    padding: "0.55rem 1.15rem 0",
+                    color: "#b91c1c",
+                    fontSize: "0.78rem",
+                    fontWeight: 700,
+                    background: "rgba(255,255,255,0.2)",
+                  }}
+                >
+                  {imageUploadFeedback}
+                </p>
+              ) : null}
+              <MessageInput
+                onSend={handleSend}
+                onImageSelected={handleImageSend}
+                onTypingActivity={scheduleTypingPing}
+                onTypingBlur={flushTypingStop}
+                isUploadingImage={isUploadingImage}
+              />
             </>
           ) : (
             <div className="empty-state">

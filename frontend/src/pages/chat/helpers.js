@@ -19,6 +19,8 @@ export const EMOJI_GROUPS = [
 
 const MAX_AVATAR_DIMENSION = 512;
 const MAX_AVATAR_DATA_URL_LENGTH = 1400000;
+const MAX_CHAT_IMAGE_DIMENSION = 1600;
+const MAX_CHAT_IMAGE_DATA_URL_LENGTH = 7600000;
 
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
@@ -89,16 +91,79 @@ export const prepareAvatarForUpload = async (file) => {
   throw new Error("The selected image is too large. Please choose a smaller one.");
 };
 
+export const prepareChatImageForUpload = async (file) => {
+  if (!file?.type?.startsWith("image/")) {
+    throw new Error("Please choose an image file.");
+  }
+
+  if (file.type === "image/svg+xml") {
+    throw new Error("SVG images are not supported for chat photos.");
+  }
+
+  const image = await loadImageFromFile(file);
+  const scale = Math.min(
+    1,
+    MAX_CHAT_IMAGE_DIMENSION / Math.max(image.width || 1, image.height || 1)
+  );
+  const width = Math.max(1, Math.round((image.width || 1) * scale));
+  const height = Math.max(1, Math.round((image.height || 1) * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Your browser could not process the selected image.");
+  }
+
+  context.clearRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+
+  for (const quality of [0.88, 0.78, 0.68, 0.58]) {
+    const dataUrl = canvas.toDataURL("image/webp", quality);
+    if (dataUrl.length <= MAX_CHAT_IMAGE_DATA_URL_LENGTH) {
+      return dataUrl;
+    }
+  }
+
+  throw new Error("The selected image is too large. Please choose a smaller one.");
+};
+
 export const formatTime = (value) =>
   new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+export const isImageMessageContent = (value = "") => {
+  const text = String(value || "").trim();
+  if (!/^https?:\/\//i.test(text)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(text);
+    const path = url.pathname.toLowerCase();
+    return (
+      url.hostname.includes("cloudinary.com") ||
+      /\.(png|jpe?g|webp|gif|avif)$/i.test(path)
+    );
+  } catch {
+    return false;
+  }
+};
 
 export const normalizeMessage = (message, currentUserId) => {
   const senderId = String(message.sender?.toString?.() ?? message.sender ?? "");
   const me = String(currentUserId ?? "");
+  const content = message.content || message.text || "";
+  const messageType =
+    message.messageType === "image" || isImageMessageContent(content)
+      ? "image"
+      : "text";
 
   return {
     id: message._id || message.id || `msg-${Date.now()}`,
-    text: message.content,
+    text: content,
+    messageType,
     sender: senderId,
     own: senderId === me,
     time: formatTime(message.createdAt || new Date()),

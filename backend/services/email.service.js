@@ -37,9 +37,9 @@ const sendEmail = async (to, subject, html) => {
       html,
     });
 
-    console.log("✅ Email sent:", info.response);
+    console.log("Email sent:", info.response);
   } catch (error) {
-    console.error("❌ Email sending failed:", error.message);
+    console.error("Email sending failed:", error.message);
     if (error.response) console.error("   Response:", error.response);
     const err = new Error(
       "Failed to send email. Verify EMAIL_USER and EMAIL_PASS (use Gmail App Password, no spaces)."

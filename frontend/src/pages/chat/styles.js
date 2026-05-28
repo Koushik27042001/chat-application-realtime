@@ -782,6 +782,9 @@ export const chatPageStyles = `
     from { opacity: 0; transform: translateY(8px) scale(0.97); }
     to { opacity: 1; transform: none; }
   }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
 
   .section-label {
     padding: 0.55rem 1rem 0.3rem;

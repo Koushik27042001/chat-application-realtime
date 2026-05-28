@@ -17,7 +17,7 @@ const { createDefaultAvatar } = require("../utils/avatar");
 const ACCESS_TOKEN_TTL = process.env.JWT_EXPIRES_IN || "7d";
 const REFRESH_TOKEN_TTL = process.env.JWT_REFRESH_EXPIRES_IN || "30d";
 const REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
-/** bcrypt.js cost; 12 is noticeably slow on shared hosts — 10 is still strong */
+/** bcrypt.js cost; 12 is noticeably slow on shared hosts - 10 is still strong */
 const BCRYPT_COST = Number(process.env.BCRYPT_COST || 10) || 10;
 
 const createAccessToken = (id) =>

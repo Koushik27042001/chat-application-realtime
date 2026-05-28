@@ -3,7 +3,24 @@ const Conversation = require("../models/Conversation");
 const conversationRepository = require("../repositories/conversation.repository");
 const messageRepository = require("../repositories/message.repository");
 
-const sendMessageService = async (senderId, receiverId, content) => {
+const normalizeMessageType = (value) => (value === "image" ? "image" : "text");
+
+const serializeMessage = (message) => {
+  const doc = typeof message?.toObject === "function" ? message.toObject() : message;
+  if (!doc) return doc;
+  return {
+    ...doc,
+    _id: doc._id?.toString?.() || doc._id,
+    conversationId: doc.conversationId?.toString?.() || doc.conversationId,
+    conversation: doc.conversation?.toString?.() || doc.conversation,
+    sender: doc.sender?.toString?.() || doc.sender,
+    receiver: doc.receiver?.toString?.() || doc.receiver,
+    messageType: doc.messageType || "text",
+  };
+};
+
+const sendMessageService = async (senderId, receiverId, content, messageType = "text") => {
+  const type = normalizeMessageType(messageType);
   let conversation = await conversationRepository.findByParticipants([senderId, receiverId]);
 
   if (!conversation) {
@@ -19,11 +36,12 @@ const sendMessageService = async (senderId, receiverId, content) => {
     sender: senderId,
     receiver: receiverId,
     content,
+    messageType: type,
     status: "sent",
   });
 
   conversation.lastMessage = message._id;
-  conversation.lastMessageText = content;
+  conversation.lastMessageText = type === "image" ? "Photo" : content;
   conversation.lastMessageAt = new Date();
 
   const receiverKey = receiverId.toString();
@@ -33,7 +51,7 @@ const sendMessageService = async (senderId, receiverId, content) => {
 
   await conversationRepository.save(conversation);
 
-  return { message, conversation };
+  return { message: serializeMessage(message), conversation };
 };
 
 const getMessagesService = async (conversationId, page = 0, limit = 20) => {

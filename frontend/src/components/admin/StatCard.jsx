@@ -5,7 +5,7 @@ export default function StatCard({ title, value, hint }) {
         {title}
       </p>
       <p className="mt-2 font-display text-3xl font-bold tabular-nums text-white">
-        {value ?? "—"}
+        {value ?? "-"}
       </p>
       {hint ? (
         <p className="mt-2 text-xs text-slate-500">{hint}</p>

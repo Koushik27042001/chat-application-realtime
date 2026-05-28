@@ -4,7 +4,7 @@ const ApiResponse = require("../utils/apiResponse");
 const { sendMessageService, getMessagesService, markConversationReadService } = require("../services/message.service");
 
 const sendMessage = asyncHandler(async (req, res) => {
-  const { receiverId, content } = req.body;
+  const { receiverId, content, messageType = "text" } = req.body;
 
   if (!receiverId || !content) {
     return res
@@ -12,7 +12,7 @@ const sendMessage = asyncHandler(async (req, res) => {
       .json(new ApiResponse(400, "receiverId and content are required"));
   }
 
-  const result = await sendMessageService(req.user.id, receiverId, content);
+  const result = await sendMessageService(req.user.id, receiverId, content, messageType);
 
   res.status(201).json(
     new ApiResponse(201, "Message sent", result)

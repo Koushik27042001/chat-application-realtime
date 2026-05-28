@@ -1,26 +1,14 @@
 function formatReadReceipt(readReceipt) {
   if (!readReceipt) return null;
   if (readReceipt === "Seen") {
-    return (
-      <>
-        <span aria-hidden style={{ marginRight: "0.2rem", letterSpacing: "-0.12em", opacity: 0.95 }}>
-          ✓✓
-        </span>
-        Seen
-      </>
-    );
+    return "Seen";
   }
-  return (
-    <>
-      <span aria-hidden style={{ marginRight: "0.2rem", opacity: 0.9 }}>
-        ✓
-      </span>
-      Sent
-    </>
-  );
+  return "Sent";
 }
 
 export default function MessageBubble({ message, readReceipt = null }) {
+  const isImage = message.messageType === "image";
+
   return (
     <div
       style={{
@@ -54,10 +42,40 @@ export default function MessageBubble({ message, readReceipt = null }) {
             color: message.own ? "#fffdf9" : "#314255",
             fontFamily: "'Manrope', sans-serif",
             fontWeight: 500,
+            display: isImage ? "none" : "block",
           }}
         >
           {message.text}
         </p>
+        {isImage ? (
+          <a
+            href={message.text}
+            target="_blank"
+            rel="noreferrer"
+            title="Open image"
+            style={{
+              display: "block",
+              overflow: "hidden",
+              borderRadius: "1rem",
+              background: message.own ? "rgba(255,255,255,0.16)" : "rgba(15,23,42,0.06)",
+            }}
+          >
+            <img
+              src={message.text}
+              alt="Shared"
+              loading="lazy"
+              style={{
+                display: "block",
+                width: "min(320px, 62vw)",
+                maxHeight: 360,
+                objectFit: "cover",
+              }}
+              onError={(event) => {
+                event.currentTarget.style.display = "none";
+              }}
+            />
+          </a>
+        ) : null}
         <p
           style={{
             fontSize: "0.65rem",

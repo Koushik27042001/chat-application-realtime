@@ -14,7 +14,7 @@ const connectDB = async() => {
             serverSelectionTimeoutMS: 15000,
         });
 
-        console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+        console.log(`MongoDB connected: ${conn.connection.host}`);
 
         if (process.env.ADMIN_EMAIL) {
             const User = require("../models/User");
@@ -28,12 +28,12 @@ const connectDB = async() => {
                     `ADMIN_EMAIL is set but no user exists with email: ${email}`
                 );
             } else {
-                console.log(`✅ Admin role synced for ${email}`);
+                console.log(`Admin role synced for ${email}`);
             }
         }
 
     } catch (error) {
-        console.error("❌ MongoDB Error:", error.message);
+        console.error("MongoDB error:", error.message);
         throw error; // ❗ don't exit here, let server handle it
     }
 };

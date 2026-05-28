@@ -22,11 +22,11 @@ async function main() {
       serverSelectionTimeoutMS: 15000,
       maxPoolSize: 5,
     });
-    console.log("SUCCESS — MongoDB connected:", mongoose.connection.host);
+    console.log("SUCCESS - MongoDB connected:", mongoose.connection.host);
     await mongoose.disconnect();
     process.exit(0);
   } catch (err) {
-    console.error("FAILED —", err.message);
+    console.error("FAILED -", err.message);
     if (err.message && err.message.includes("bad auth")) {
       console.error(
         "\n→ Fix: Atlas → Database Access → reset password for this user.\n" +

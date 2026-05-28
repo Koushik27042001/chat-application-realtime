@@ -8,6 +8,7 @@ const authRoutes = require("./routes/authRoutes");
 const conversationRoutes = require("./routes/conversationRoutes");
 const messageRoutes = require("./routes/messageRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const uploadRoutes = require("./routes/uploadRoutes");
 const userRoutes = require("./routes/userRoutes");
 
 const app = express();
@@ -24,7 +25,7 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use((req, res, next) => {
@@ -49,6 +50,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/conversations", conversationRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/uploads", uploadRoutes);
 app.use("/api/users", userRoutes);
 
 app.use(errorHandler);

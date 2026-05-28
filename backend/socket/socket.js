@@ -31,7 +31,7 @@ const createAndEmitNotification = async (io, payload) => {
 const initializeSocket = (io) => {
     io.on("connection", (socket) => {
 
-        console.log("⚡ User connected:", socket.id);
+        console.log("User connected:", socket.id);
 
         // ✅ USER JOIN
         socket.on("join", (userId) => {
@@ -53,9 +53,11 @@ const initializeSocket = (io) => {
             }
 
             if (receiverId) {
-                const preview = typeof message?.content === "string"
-                    ? message.content.slice(0, 160)
-                    : "New message";
+                const preview = message?.messageType === "image"
+                    ? "Photo"
+                    : typeof message?.content === "string"
+                        ? message.content.slice(0, 160)
+                        : "New message";
                 createAndEmitNotification(io, {
                     userId: receiverId,
                     type: "MESSAGE",
@@ -155,7 +157,7 @@ const initializeSocket = (io) => {
 
             io.emit("online-users", Array.from(onlineUsers.keys()));
 
-            console.log("❌ User disconnected:", socket.id);
+            console.log("User disconnected:", socket.id);
         });
     });
 };

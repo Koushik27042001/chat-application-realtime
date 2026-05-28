@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const userRepository = require("../repositories/user.repository");
 const { createDefaultAvatar } = require("../utils/avatar");
+const { uploadImageToCloudinary } = require("./upload.service");
 
 const listUsersService = async (currentUserId, search) => {
   const filters = [{ _id: { $ne: currentUserId } }];
@@ -85,13 +86,11 @@ const updateAvatarService = async (currentUserId, avatar) => {
     throw error;
   }
 
-  if (isDataImage && trimmed.length > 1_500_000) {
-    const error = new Error("Avatar image is too large (max ~1.5MB)");
-    error.statusCode = 413;
-    throw error;
-  }
+  const avatarUrl = isDataImage
+    ? (await uploadImageToCloudinary(trimmed, { folder: "chat-app/avatars" })).url
+    : trimmed;
 
-  const user = await userRepository.updateById(currentUserId, { avatar: trimmed });
+  const user = await userRepository.updateById(currentUserId, { avatar: avatarUrl });
   if (!user) {
     const error = new Error("User not found");
     error.statusCode = 404;

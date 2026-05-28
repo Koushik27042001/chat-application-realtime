@@ -166,6 +166,11 @@ export const notificationApi = {
     apiClient.patch("/notifications/read-all", {}, createAuthConfig(token)),
 };
 
+export const uploadApi = {
+  image: (token, image) =>
+    apiClient.post("/uploads/image", { image }, createAuthConfig(token)),
+};
+
 export const userApi = {
   list: (token, search = "") => {
     const query = search ? `?search=${encodeURIComponent(search)}` : "";

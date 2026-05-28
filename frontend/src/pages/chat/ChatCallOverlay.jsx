@@ -122,7 +122,7 @@ export default function ChatCallOverlay({
                   pointerEvents: "none",
                 }}
               >
-                {rtc.incoming ? "Incoming video call" : "Ringing…"}
+                {rtc.incoming ? "Incoming video call" : "Ringing..."}
               </div>
             ) : null}
 
@@ -167,7 +167,7 @@ export default function ChatCallOverlay({
               {rtc.incoming
                 ? `Incoming ${rtc.incoming.callType === "audio" ? "voice" : "video"} call`
                 : rtc.session?.phase === "ringing"
-                  ? "Ringing…"
+                  ? "Ringing..."
                 : rtc.session?.callType === "voice"
                   ? "Voice call in progress"
                   : null}
