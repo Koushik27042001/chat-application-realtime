@@ -23,6 +23,7 @@ const sendEmail = async (to, subject, html) => {
   const host = cleanEnv(process.env.SMTP_HOST) || "smtp.gmail.com";
   const port = Number(cleanEnv(process.env.SMTP_PORT)) || 587;
   const from = cleanEnv(process.env.SMTP_FROM) || `"Chat App" <${user}>`;
+  const isGmailHost = host.toLowerCase().includes("gmail");
 
   if (!user || !pass) {
     const err = new Error(
@@ -34,9 +35,14 @@ const sendEmail = async (to, subject, html) => {
 
   try {
     const transporter = nodemailer.createTransport({
+      ...(isGmailHost ? { service: "gmail" } : {}),
       host,
       port,
       secure: port === 465,
+      requireTLS: port !== 465,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
       auth: { user, pass },
     });
 
@@ -58,9 +64,14 @@ const sendEmail = async (to, subject, html) => {
       smtpHost: host,
       smtpPort: port,
     });
-    const err = new Error(
-      "Failed to send email. Verify the SMTP settings configured on the server."
-    );
+    const hint =
+      error?.code === "EAUTH" || error?.responseCode === 535
+        ? "SMTP auth failed. Verify EMAIL_USER and EMAIL_PASS (Gmail App Password)."
+        : error?.code === "ETIMEDOUT"
+        ? "SMTP connection timed out. Verify SMTP_HOST/SMTP_PORT and provider access."
+        : "Failed to send email. Verify the SMTP settings configured on the server.";
+
+    const err = new Error(hint);
     err.statusCode = 502;
     throw err;
   }
