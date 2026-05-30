@@ -322,16 +322,23 @@ const forgotPasswordService = async (email) => {
   const baseUrl = (process.env.FRONTEND_URL || process.env.CLIENT_URL || "http://localhost:5173").replace(/\/$/, "");
   const resetUrl = `${baseUrl}/reset-password/${resetToken}`;
 
-  await sendEmail(
-    user.email,
-    "Reset your password",
-    `
-    <h3>Password Reset</h3>
-    <p>Click the link below to reset your password:</p>
-    <a href="${resetUrl}">${resetUrl}</a>
-    <p>Valid for 10 minutes</p>
-    `
-  );
+  try {
+    await sendEmail(
+      user.email,
+      "Reset your password",
+      `
+      <h3>Password Reset</h3>
+      <p>Click the link below to reset your password:</p>
+      <a href="${resetUrl}">${resetUrl}</a>
+      <p>Valid for 10 minutes</p>
+      `
+    );
+  } catch (error) {
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save();
+    throw error;
+  }
 
   return { message: "Reset link sent to email" };
 };
@@ -373,11 +380,18 @@ const sendOTPService = async (email) => {
   user.otpExpire = new Date(otpExpire);
   await user.save();
 
-  await sendEmail(
-    user.email,
-    "OTP for Password Reset",
-    `<h2>Your OTP is: ${otp}</h2><p>Valid for 5 minutes.</p>`
-  );
+  try {
+    await sendEmail(
+      user.email,
+      "OTP for Password Reset",
+      `<h2>Your OTP is: ${otp}</h2><p>Valid for 5 minutes.</p>`
+    );
+  } catch (error) {
+    user.otp = undefined;
+    user.otpExpire = undefined;
+    await user.save();
+    throw error;
+  }
 
   return { message: "OTP sent to email" };
 };
