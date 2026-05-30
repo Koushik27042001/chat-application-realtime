@@ -1,4 +1,5 @@
 const nodemailer = require("nodemailer");
+const dns = require("dns");
 
 const cleanEnv = (value, { removeSpaces = false } = {}) => {
   if (!value) return "";
@@ -24,6 +25,8 @@ const sendEmail = async (to, subject, html) => {
   const port = Number(cleanEnv(process.env.SMTP_PORT)) || 587;
   const from = cleanEnv(process.env.SMTP_FROM) || `"Chat App" <${user}>`;
   const isGmailHost = host.toLowerCase().includes("gmail");
+  const forceIPv4 =
+    cleanEnv(process.env.SMTP_FORCE_IPV4 || "true").toLowerCase() !== "false";
 
   if (!user || !pass) {
     const err = new Error(
@@ -43,6 +46,12 @@ const sendEmail = async (to, subject, html) => {
       connectionTimeout: 10000,
       greetingTimeout: 10000,
       socketTimeout: 15000,
+      ...(forceIPv4
+        ? {
+            lookup: (hostname, _options, callback) =>
+              dns.lookup(hostname, { family: 4, all: false }, callback),
+          }
+        : {}),
       auth: { user, pass },
     });
 
@@ -63,6 +72,7 @@ const sendEmail = async (to, subject, html) => {
       message: error.message,
       smtpHost: host,
       smtpPort: port,
+      forceIPv4,
     });
     const hint =
       error?.code === "EAUTH" || error?.responseCode === 535
