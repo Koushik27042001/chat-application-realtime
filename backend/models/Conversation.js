@@ -31,13 +31,29 @@ const conversationSchema = new mongoose.Schema({
         default: {},
     },
 
-    // 🔥 for future (group chats)
+    // 🔥 group chat fields
     isGroup: {
         type: Boolean,
         default: false,
     },
 
     groupName: {
+        type: String,
+        default: "",
+    },
+
+    groupDescription: {
+        type: String,
+        default: "",
+    },
+
+    groupAdmin: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+    },
+
+    groupImage: {
         type: String,
         default: "",
     },

@@ -1,4 +1,6 @@
+import { useState } from "react";
 import Avatar from "./Avatar";
+import GroupMembers from "./GroupMembers";
 
 export default function ChatHeader({
   activeContact,
@@ -8,96 +10,113 @@ export default function ChatHeader({
   callDurationLabel = "00:00",
   onToggleVideoCall,
   onToggleVoiceCall,
+  token,
+  currentUserId,
+  onGroupMemberRemoved,
 }) {
+  const [isGroupMembersOpen, setIsGroupMembersOpen] = useState(false);
+
   if (!activeContact) {
     return null;
   }
 
+  const isGroup = activeContact.isGroup;
+
   return (
-    <div className="chat-header-bar reveal d1 show">
-      <Avatar
-        name={activeContact.name}
-        size={40}
-        online={online}
-        src={activeContact.avatar}
-      />
-      <div>
-        <p className="chat-contact-name">{activeContact.name}</p>
-        <p className={`chat-contact-status ${online ? "online" : ""}`}>
-          {partnerTyping ? (
-            <span className="chat-typing-line">
-              Typing
-              <span className="chat-typing-dots">
-                <span />
-                <span />
-                <span />
-              </span>
-            </span>
-          ) : online ? (
-            "Active now"
-          ) : (
-            "Offline"
-          )}
-        </p>
-      </div>
-
-      {callMode ? (
+    <>
+      <div className="chat-header-bar reveal d1 show">
+        <Avatar
+          name={activeContact.name}
+          size={40}
+          online={online && !isGroup}
+          src={activeContact.avatar}
+        />
         <div
-          style={{
-            marginLeft: "auto",
-            marginRight: "0.35rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.45rem",
-            padding: "0.45rem 0.7rem",
-            borderRadius: "999px",
-            background:
-              callMode === "video"
-                ? "linear-gradient(135deg, rgba(255,122,89,0.14), rgba(255,186,120,0.2))"
-                : "linear-gradient(135deg, rgba(31,182,166,0.14), rgba(79,209,197,0.2))",
-            border:
-              callMode === "video"
-                ? "1px solid rgba(255,122,89,0.2)"
-                : "1px solid rgba(31,182,166,0.25)",
-            color: callMode === "video" ? "#c95d37" : "#14877a",
-            fontSize: "0.73rem",
-            fontWeight: 800,
-            boxShadow: "0 12px 24px rgba(255,122,89,0.08)",
-            whiteSpace: "nowrap",
-          }}
+          style={{ cursor: isGroup ? "pointer" : "default" }}
+          onClick={() => isGroup && setIsGroupMembersOpen(true)}
         >
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: callMode === "video" ? "#ff7a59" : "#1fb6a6",
-              boxShadow:
-                callMode === "video"
-                  ? "0 0 0 5px rgba(255,122,89,0.12)"
-                  : "0 0 0 5px rgba(31,182,166,0.15)",
-            }}
-          />
-          <span>{callMode === "video" ? "Video" : "Voice"} call {callDurationLabel}</span>
+          <p className="chat-contact-name">{activeContact.name}</p>
+          <p className={`chat-contact-status ${online && !isGroup ? "online" : ""}`}>
+            {isGroup ? (
+              <span>
+                {activeContact.participants?.length || 0} member{
+                  (activeContact.participants?.length || 0) !== 1 ? "s" : ""
+                }
+              </span>
+            ) : partnerTyping ? (
+              <span className="chat-typing-line">
+                Typing
+                <span className="chat-typing-dots">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              </span>
+            ) : online ? (
+              "Active now"
+            ) : (
+              "Offline"
+            )}
+          </p>
         </div>
-      ) : null}
 
-      <div style={{ display: "flex", gap: "0.55rem" }}>
-        <button
-          type="button"
-          onClick={onToggleVideoCall}
-          title={callMode === "video" ? "End video call" : "Start video call"}
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: "1rem",
-            background:
-              callMode === "video"
-                ? "linear-gradient(135deg, #ff7a59, #ffb347)"
-                : "rgba(255,255,255,0.8)",
-            border:
-              callMode === "video" ? "none" : "1px solid rgba(255,122,89,0.12)",
-            display: "flex",
+        {callMode ? (
+          <div
+            style={{
+              marginLeft: "auto",
+              marginRight: "0.35rem",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.45rem",
+              padding: "0.45rem 0.7rem",
+              borderRadius: "999px",
+              background:
+                callMode === "video"
+                  ? "linear-gradient(135deg, rgba(255,122,89,0.14), rgba(255,186,120,0.2))"
+                  : "linear-gradient(135deg, rgba(31,182,166,0.14), rgba(79,209,197,0.2))",
+              border:
+                callMode === "video"
+                  ? "1px solid rgba(255,122,89,0.2)"
+                  : "1px solid rgba(31,182,166,0.25)",
+              color: callMode === "video" ? "#c95d37" : "#14877a",
+              fontSize: "0.73rem",
+              fontWeight: 800,
+              boxShadow: "0 12px 24px rgba(255,122,89,0.08)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: callMode === "video" ? "#ff7a59" : "#1fb6a6",
+                boxShadow:
+                  callMode === "video"
+                    ? "0 0 0 5px rgba(255,122,89,0.12)"
+                    : "0 0 0 5px rgba(31,182,166,0.15)",
+              }}
+            />
+            <span>{callMode === "video" ? "Video" : "Voice"} call {callDurationLabel}</span>
+          </div>
+        ) : null}
+
+        <div style={{ display: "flex", gap: "0.55rem" }}>
+          <button
+            type="button"
+            onClick={onToggleVideoCall}
+            title={callMode === "video" ? "End video call" : "Start video call"}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: "1rem",
+              background:
+                callMode === "video"
+                  ? "linear-gradient(135deg, #ff7a59, #ffb347)"
+                  : "rgba(255,255,255,0.8)",
+              border:
+                callMode === "video" ? "none" : "1px solid rgba(255,122,89,0.12)",
+              display: "flex",
             alignItems: "center",
             justifyContent: "center",
             cursor: "pointer",
@@ -162,5 +181,15 @@ export default function ChatHeader({
         </button>
       </div>
     </div>
+
+    <GroupMembers
+      group={isGroup ? activeContact : null}
+      currentUserId={currentUserId}
+      token={token}
+      onMemberRemoved={onGroupMemberRemoved}
+      isOpen={isGroupMembersOpen}
+      onClose={() => setIsGroupMembersOpen(false)}
+    />
+    </>
   );
 }

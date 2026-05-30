@@ -147,6 +147,17 @@ export const conversationApi = {
   list: (token) => apiClient.get("/conversations", createAuthConfig(token)),
   withUser: (token, userId) =>
     apiClient.get(`/conversations/with/${userId}`, createAuthConfig(token)),
+  // 🔥 GROUP OPERATIONS
+  createGroup: (token, payload) =>
+    apiClient.post("/conversations/group/create", payload, createAuthConfig(token)),
+  getGroupDetails: (token, groupId) =>
+    apiClient.get(`/conversations/group/${groupId}`, createAuthConfig(token)),
+  addGroupMember: (token, payload) =>
+    apiClient.post("/conversations/group/add-member", payload, createAuthConfig(token)),
+  removeGroupMember: (token, payload) =>
+    apiClient.post("/conversations/group/remove-member", payload, createAuthConfig(token)),
+  updateGroupInfo: (token, groupId, payload) =>
+    apiClient.patch(`/conversations/group/${groupId}`, payload, createAuthConfig(token)),
 };
 
 export const adminApi = {

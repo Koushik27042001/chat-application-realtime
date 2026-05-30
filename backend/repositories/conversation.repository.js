@@ -20,6 +20,41 @@ const findManyByParticipant = (userId) =>
 
 const save = (conversation) => conversation.save();
 
+// 🔥 GROUP OPERATIONS
+const createGroup = (groupData) => Conversation.create(groupData);
+
+const findGroupById = (groupId) =>
+  Conversation.findById(groupId)
+    .populate("participants", "_id name email avatar")
+    .populate("groupAdmin", "_id name");
+
+const addGroupMember = async (groupId, userId) => {
+  const conversation = await Conversation.findById(groupId);
+  if (conversation && !conversation.participants.includes(userId)) {
+    conversation.participants.push(userId);
+    return conversation.save();
+  }
+  return conversation;
+};
+
+const removeGroupMember = async (groupId, userId) => {
+  const conversation = await Conversation.findById(groupId);
+  if (conversation) {
+    conversation.participants = conversation.participants.filter(
+      (id) => String(id) !== String(userId)
+    );
+    return conversation.save();
+  }
+  return conversation;
+};
+
+const updateGroupInfo = async (groupId, groupData) => {
+  return Conversation.findByIdAndUpdate(groupId, groupData, {
+    new: true,
+    runValidators: true,
+  }).populate("participants", "_id name email avatar");
+};
+
 module.exports = {
   findByParticipants,
   create,
@@ -27,4 +62,9 @@ module.exports = {
   findByParticipantsSelect,
   findManyByParticipant,
   save,
+  createGroup,
+  findGroupById,
+  addGroupMember,
+  removeGroupMember,
+  updateGroupInfo,
 };

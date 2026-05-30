@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+
 import Avatar from "../components/chat/Avatar";
 import ChatHeader from "../components/chat/ChatHeader";
 import ContactRow from "../components/chat/ContactRow";
 import MessageBubble from "../components/chat/MessageBubble";
 import MessageInput from "../components/chat/MessageInput";
 import SearchBar from "../components/chat/SearchBar";
+import GroupCreationModal from "../components/chat/GroupCreationModal";
 import { useAuth } from "../context/AuthContext";
 import useNotifications from "../hooks/useNotifications";
 import useSocket from "../hooks/useSocket";
@@ -59,6 +61,7 @@ export default function Chat() {
   const [partnerTyping, setPartnerTyping] = useState(false);
   const [callDurationSeconds, setCallDurationSeconds] = useState(0);
   const [showScrollJump, setShowScrollJump] = useState(false);
+  const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
 
   const activeChatIdRef = useRef(null);
   const contactsRef = useRef([]);
@@ -782,7 +785,40 @@ export default function Chat() {
             <SearchBar value={searchTerm} onChange={setSearchTerm} />
           </div>
 
-          <p className="section-label">{searchQuery ? "Search results" : "Chats"}</p>
+          <div style={{ padding: "0.5rem 0.85rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <p className="section-label" style={{ margin: 0, flex: 1 }}>{searchQuery ? "Search results" : "Chats"}</p>
+            <button
+              onClick={() => setIsGroupModalOpen(true)}
+              className="create-group-btn"
+              title="Create a new group"
+              style={{
+                padding: "0.4rem 0.8rem",
+                borderRadius: "0.5rem",
+                backgroundColor: "#ff7a59",
+                color: "#fff",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "0.75rem",
+                fontWeight: "600",
+                transition: "background-color 0.2s",
+                whiteSpace: "nowrap",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4rem",
+              }}
+              onMouseEnter={(e) => (e.target.style.backgroundColor = "#ff6a3d")}
+              onMouseLeave={(e) => (e.target.style.backgroundColor = "#ff7a59")}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+              Group
+
+            </button>
+          </div>
 
           <div className="contact-list">
             {isSearching ? (
@@ -911,6 +947,23 @@ export default function Chat() {
                 callDurationLabel={callDurationLabel}
                 onToggleVideoCall={handleToggleVideoCall}
                 onToggleVoiceCall={handleToggleVoiceCall}
+                token={token}
+                currentUserId={user?.id}
+                onGroupMemberRemoved={(memberId) => {
+                  // Handle member removal from group
+                  if (activeContact.participants) {
+                    setContacts((prev) =>
+                      prev.map((c) =>
+                        c.id === activeContact.id
+                          ? {
+                              ...c,
+                              participants: c.participants.filter((p) => p.id !== memberId && p._id !== memberId),
+                            }
+                          : c
+                      )
+                    );
+                  }
+                }}
               />
 
               <div className="messages-area" ref={messagesAreaRef}>
@@ -990,6 +1043,26 @@ export default function Chat() {
           callDurationSeconds={callDurationSeconds}
           isIncomingVideo={isIncomingVideo}
           isActiveVideoSession={isActiveVideoSession}
+        />
+
+        <GroupCreationModal
+          isOpen={isGroupModalOpen}
+          onClose={() => setIsGroupModalOpen(false)}
+          contacts={contacts.filter((c) => !c.isGroup)}
+          token={token}
+          currentUser={user}
+          onGroupCreated={(group) => {
+            setIsGroupModalOpen(false);
+            // Fetch updated conversations list
+            if (token) {
+              conversationApi.list(token).then(({ data }) => {
+                setContacts(data || []);
+                setActiveChatId(group.conversationId);
+              }).catch(() => {
+                // Handle error silently
+              });
+            }
+          }}
         />
       </div>
     </>
