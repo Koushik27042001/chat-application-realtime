@@ -19,22 +19,59 @@ const serializeMessage = (message) => {
   };
 };
 
-const sendMessageService = async (senderId, receiverId, content, messageType = "text") => {
-  const type = normalizeMessageType(messageType);
-  let conversation = await conversationRepository.findByParticipants([senderId, receiverId]);
+const ensureParticipant = (conversation, userId) =>
+  (conversation.participants || []).some(
+    (participant) => String(participant) === String(userId) || String(participant?._id) === String(userId)
+  );
 
-  if (!conversation) {
-    conversation = await conversationRepository.create({
-      participants: [senderId, receiverId],
-      unreadCounts: {},
-    });
+const sendMessageService = async (
+  senderId,
+  { receiverId, conversationId, content, messageType = "text" }
+) => {
+  const type = normalizeMessageType(messageType);
+  let conversation;
+
+  if (conversationId) {
+    conversation = await Conversation.findById(conversationId);
+    if (!conversation) {
+      const error = new Error("Conversation not found");
+      error.statusCode = 404;
+      throw error;
+    }
+    if (!ensureParticipant(conversation, senderId)) {
+      const error = new Error("Not a participant in this conversation");
+      error.statusCode = 403;
+      throw error;
+    }
+  } else {
+    if (!receiverId) {
+      const error = new Error("receiverId is required");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    conversation = await conversationRepository.findByParticipants([senderId, receiverId]);
+    if (!conversation) {
+      conversation = await conversationRepository.create({
+        participants: [senderId, receiverId],
+        unreadCounts: {},
+      });
+    }
   }
+
+  const participantIds = (conversation.participants || []).map((p) => String(p));
+  const isGroup = Boolean(conversation.isGroup);
+  const resolvedReceiverId = isGroup
+    ? String(senderId)
+    : receiverId ||
+      participantIds.find((id) => id !== String(senderId)) ||
+      String(senderId);
 
   const message = await messageRepository.create({
     conversationId: conversation._id,
     conversation: conversation._id,
     sender: senderId,
-    receiver: receiverId,
+    receiver: resolvedReceiverId,
     content,
     messageType: type,
     status: "sent",
@@ -43,18 +80,43 @@ const sendMessageService = async (senderId, receiverId, content, messageType = "
   conversation.lastMessage = message._id;
   conversation.lastMessageText = type === "image" ? "Photo" : content;
   conversation.lastMessageAt = new Date();
-
-  const receiverKey = receiverId.toString();
-  const count = conversation.unreadCounts?.get(receiverKey) || 0;
   conversation.unreadCounts = conversation.unreadCounts || new Map();
-  conversation.unreadCounts.set(receiverKey, count + 1);
+
+  for (const participantId of participantIds) {
+    if (participantId === String(senderId)) {
+      continue;
+    }
+    const unread = conversation.unreadCounts.get(participantId) || 0;
+    conversation.unreadCounts.set(participantId, unread + 1);
+  }
 
   await conversationRepository.save(conversation);
 
-  return { message: serializeMessage(message), conversation };
+  return {
+    message: serializeMessage(message),
+    conversation,
+    recipientIds: participantIds.filter((id) => id !== String(senderId)),
+  };
 };
 
-const getMessagesService = async (conversationId, page = 0, limit = 20) => {
+const getMessagesService = async (readerId, conversationId, page = 0, limit = 20) => {
+  const conversation = await conversationRepository.findById(
+    conversationId,
+    "_id participants"
+  );
+
+  if (!conversation) {
+    const error = new Error("Conversation not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  if (!ensureParticipant(conversation, readerId)) {
+    const error = new Error("Not a participant");
+    error.statusCode = 403;
+    throw error;
+  }
+
   const messages = await messageRepository.findByConversation(conversationId, {
     page,
     limit,
@@ -72,7 +134,10 @@ const markConversationReadService = async (readerId, conversationId) => {
     throw error;
   }
 
-  const conversation = await conversationRepository.findById(conversationId, "participants unreadCounts");
+  const conversation = await conversationRepository.findById(
+    conversationId,
+    "participants unreadCounts isGroup"
+  );
 
   if (!conversation) {
     const error = new Error("Conversation not found");
@@ -80,22 +145,20 @@ const markConversationReadService = async (readerId, conversationId) => {
     throw error;
   }
 
-  const readerStr = String(readerId);
-  const isParticipant = (conversation.participants || []).some(
-    (p) => String(p) === readerStr || String(p?._id) === readerStr
-  );
-  if (!isParticipant) {
+  if (!ensureParticipant(conversation, readerId)) {
     const error = new Error("Not a participant");
     error.statusCode = 403;
     throw error;
   }
 
-  await messageRepository.markAsSeenForReceiver(convId, readerId);
+  if (!conversation.isGroup) {
+    await messageRepository.markAsSeenForReceiver(convId, readerId);
+  }
 
   const convDoc = await Conversation.findById(convId);
   if (convDoc) {
     convDoc.unreadCounts = convDoc.unreadCounts || new Map();
-    convDoc.unreadCounts.set(readerStr, 0);
+    convDoc.unreadCounts.set(String(readerId), 0);
     await convDoc.save();
   }
 

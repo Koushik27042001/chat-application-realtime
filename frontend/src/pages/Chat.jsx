@@ -187,8 +187,17 @@ export default function Chat() {
 
   const handleIncomingMessage = async (message) => {
     const senderId = String(message.sender?.toString?.() ?? message.sender ?? "");
+    const incomingConversationId = String(
+      message.conversationId?.toString?.() ?? message.conversationId ?? ""
+    );
     const normalizedIncomingMessage = normalizeMessage(message, user?.id);
-    let incomingContact = contactsRef.current.find((contact) => contact.id === senderId);
+    let incomingContact =
+      contactsRef.current.find(
+        (contact) =>
+          contact.isGroup &&
+          String(contact.conversationId || contact.id) === incomingConversationId
+      ) ||
+      contactsRef.current.find((contact) => contact.id === senderId);
 
     if (!incomingContact && token && senderId) {
       try {
@@ -214,7 +223,13 @@ export default function Chat() {
       );
     }
 
-    if (activeChatIdRef.current === senderId) {
+    const isActiveIncoming =
+      activeChatIdRef.current === senderId ||
+      (incomingContact?.isGroup &&
+        String(incomingContact.conversationId || incomingContact.id) === incomingConversationId &&
+        String(activeChatIdRef.current) === String(incomingContact.id));
+
+    if (isActiveIncoming) {
       setMessages((current) => [...current, normalizedIncomingMessage]);
       const cid =
         message.conversationId?.toString?.() ??
@@ -224,10 +239,22 @@ export default function Chat() {
         markIncomingReadTimerRef.current = window.setTimeout(async () => {
           try {
             await messageApi.markRead(token, cid);
-            socketRef.current?.emit("read-receipt", {
-              receiverId: senderId,
-              conversationId: cid,
-            });
+            if (incomingContact?.isGroup) {
+              (incomingContact.participants || [])
+                .map((participant) => String(participant.id || participant._id || ""))
+                .filter((id) => id && id !== String(user?.id))
+                .forEach((receiverId) => {
+                  socketRef.current?.emit("read-receipt", {
+                    receiverId,
+                    conversationId: cid,
+                  });
+                });
+            } else {
+              socketRef.current?.emit("read-receipt", {
+                receiverId: senderId,
+                conversationId: cid,
+              });
+            }
           } catch {
             /* ignore */
           }
@@ -424,7 +451,7 @@ export default function Chat() {
     (async () => {
       try {
         let conversationId = activeContact.conversationId;
-        if (!conversationId) {
+        if (!conversationId && !activeContact.isGroup) {
           const { data } = await conversationApi.withUser(token, activeContact.id);
           conversationId = data.conversationId || null;
           setContacts((current) =>
@@ -507,7 +534,16 @@ export default function Chat() {
       try {
         await messageApi.markRead(token, cid);
         if (cancelled) return;
-        socket.emit("read-receipt", { receiverId: pid, conversationId: cid });
+        if (activeContact.isGroup) {
+          (activeContact.participants || [])
+            .map((participant) => String(participant.id || participant._id || ""))
+            .filter((id) => id && id !== String(user?.id))
+            .forEach((receiverId) => {
+              socket.emit("read-receipt", { receiverId, conversationId: cid });
+            });
+        } else {
+          socket.emit("read-receipt", { receiverId: pid, conversationId: cid });
+        }
       } catch {
         /* ignore */
       }
@@ -530,24 +566,37 @@ export default function Chat() {
     const s = socketRef.current;
     const peerId = threadRef.current.peerId;
     if (!s || !peerId) return;
+    const targetContact = contactsRef.current.find((contact) => String(contact.id) === String(peerId));
+    const recipientIds = targetContact?.isGroup
+      ? (targetContact.participants || [])
+          .map((participant) => String(participant.id || participant._id || ""))
+          .filter((id) => id && id !== String(user?.id))
+      : [String(peerId)];
+
     const now = Date.now();
     if (now - typingThrottleRef.current > 750) {
-      s.emit("typing", { receiverId: peerId });
+      recipientIds.forEach((receiverId) => s.emit("typing", { receiverId }));
       typingThrottleRef.current = now;
     }
     window.clearTimeout(typingAutoStopRef.current);
     typingAutoStopRef.current = window.setTimeout(() => {
-      s.emit("stop-typing", { receiverId: peerId });
+      recipientIds.forEach((receiverId) => s.emit("stop-typing", { receiverId }));
     }, 2600);
-  }, []);
+  }, [user?.id]);
 
   const flushTypingStop = useCallback(() => {
     const s = socketRef.current;
     const peerId = threadRef.current.peerId;
     if (!s || !peerId) return;
+    const targetContact = contactsRef.current.find((contact) => String(contact.id) === String(peerId));
+    const recipientIds = targetContact?.isGroup
+      ? (targetContact.participants || [])
+          .map((participant) => String(participant.id || participant._id || ""))
+          .filter((id) => id && id !== String(user?.id))
+      : [String(peerId)];
     window.clearTimeout(typingAutoStopRef.current);
-    s.emit("stop-typing", { receiverId: peerId });
-  }, []);
+    recipientIds.forEach((receiverId) => s.emit("stop-typing", { receiverId }));
+  }, [user?.id]);
 
   const callPeerId = rtc.incoming?.from ?? rtc.session?.peerId ?? null;
 
@@ -593,7 +642,9 @@ export default function Chat() {
 
     try {
       const { data } = await messageApi.send(token, {
-        receiverId: activeContact.id,
+        ...(activeContact.isGroup
+          ? { conversationId: activeContact.conversationId || activeContact.id }
+          : { receiverId: activeContact.id }),
         content: text,
         messageType: "text",
       });
@@ -616,6 +667,11 @@ export default function Chat() {
       if (socket) {
         socket.emit("private-message", {
           receiverId: activeContact.id,
+          receiverIds: activeContact.isGroup
+            ? (activeContact.participants || [])
+                .map((participant) => String(participant.id || participant._id || ""))
+                .filter((id) => id && id !== String(user?.id))
+            : undefined,
           message: data.message,
         });
       }
@@ -634,7 +690,9 @@ export default function Chat() {
       const image = await prepareChatImageForUpload(file);
       const { data: uploaded } = await uploadApi.image(token, image);
       const { data } = await messageApi.send(token, {
-        receiverId: activeContact.id,
+        ...(activeContact.isGroup
+          ? { conversationId: activeContact.conversationId || activeContact.id }
+          : { receiverId: activeContact.id }),
         content: uploaded.url,
         messageType: "image",
       });
@@ -657,6 +715,11 @@ export default function Chat() {
       if (socket) {
         socket.emit("private-message", {
           receiverId: activeContact.id,
+          receiverIds: activeContact.isGroup
+            ? (activeContact.participants || [])
+                .map((participant) => String(participant.id || participant._id || ""))
+                .filter((id) => id && id !== String(user?.id))
+            : undefined,
           message: data.message,
         });
       }

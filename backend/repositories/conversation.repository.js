@@ -1,7 +1,11 @@
 const Conversation = require("../models/Conversation");
 
 const findByParticipants = (participantIds) =>
-  Conversation.findOne({ participants: { $all: participantIds } });
+  Conversation.findOne({
+    isGroup: false,
+    participants: { $all: participantIds },
+    $expr: { $eq: [{ $size: "$participants" }, 2] },
+  });
 
 const create = (data) => Conversation.create(data);
 
@@ -9,12 +13,17 @@ const findById = (id, projection = "_id participants lastMessage updatedAt") =>
   Conversation.findById(id).select(projection).lean();
 
 const findByParticipantsSelect = (participantIds, projection) =>
-  Conversation.findOne({ participants: { $all: participantIds } })
+  Conversation.findOne({
+    isGroup: false,
+    participants: { $all: participantIds },
+    $expr: { $eq: [{ $size: "$participants" }, 2] },
+  })
     .select(projection);
 
 const findManyByParticipant = (userId) =>
   Conversation.find({ participants: userId })
     .populate("participants", "_id name email avatar")
+    .populate("groupAdmin", "_id name")
     .sort({ lastMessageAt: -1 })
     .lean();
 

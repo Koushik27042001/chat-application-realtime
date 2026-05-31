@@ -1,7 +1,39 @@
-const mongoose = require("mongoose");
 const conversationRepository = require("../repositories/conversation.repository");
-
 const { createDefaultAvatar } = require("../utils/avatar");
+
+const mapGroupParticipants = (participants = []) =>
+  participants.map((participant) => ({
+    id: participant._id.toString(),
+    name: participant.name,
+    email: participant.email,
+    avatar: participant.avatar || createDefaultAvatar(participant.name),
+  }));
+
+const mapGroupConversation = (conversation) => {
+  const participants = mapGroupParticipants(conversation.participants || []);
+  const adminId =
+    conversation.groupAdmin?._id?.toString?.() ||
+    conversation.groupAdmin?.toString?.() ||
+    "";
+
+  return {
+    id: conversation._id.toString(),
+    name: conversation.groupName,
+    email: "",
+    avatar: conversation.groupImage || "👥",
+    conversationId: conversation._id.toString(),
+    lastMessage: conversation.lastMessageText || "No messages yet",
+    lastMessageAt: conversation.lastMessageAt || conversation.updatedAt,
+    isGroup: true,
+    participants,
+    admin: adminId
+      ? participants.find((p) => p.id === adminId) || {
+          _id: adminId,
+          name: conversation.groupAdmin?.name || "Admin",
+        }
+      : null,
+  };
+};
 
 const listMyConversationsService = async (currentUserId) => {
   const conversations = await conversationRepository.findManyByParticipant(currentUserId);
@@ -9,16 +41,7 @@ const listMyConversationsService = async (currentUserId) => {
   return conversations
     .map((conversation) => {
       if (conversation.isGroup) {
-        return {
-          id: conversation._id.toString(),
-          name: conversation.groupName,
-          email: "",
-          avatar: conversation.groupImage || "👥",
-          conversationId: conversation._id.toString(),
-          lastMessage: conversation.lastMessageText || "No messages yet",
-          lastMessageAt: conversation.lastMessageAt || conversation.updatedAt,
-          isGroup: true,
-        };
+        return mapGroupConversation(conversation);
       }
 
       const otherParticipant = (conversation.participants || []).find(
@@ -58,11 +81,8 @@ const getConversationWithUserService = async (currentUserId, targetUserId) => {
   };
 };
 
-// 🔥 GROUP SERVICES
 const createGroupService = async (currentUserId, groupData) => {
   const { groupName, groupDescription, participantIds } = groupData;
-
-  // Ensure current user is included in the group
   const allParticipants = Array.from(new Set([currentUserId, ...participantIds]));
 
   const newGroup = await conversationRepository.createGroup({
@@ -75,15 +95,8 @@ const createGroupService = async (currentUserId, groupData) => {
     lastMessageAt: new Date(),
   });
 
-  return {
-    id: newGroup._id.toString(),
-    name: newGroup.groupName,
-    description: newGroup.groupDescription,
-    admin: newGroup.groupAdmin,
-    participants: newGroup.participants,
-    conversationId: newGroup._id.toString(),
-    isGroup: true,
-  };
+  const hydratedGroup = await conversationRepository.findGroupById(newGroup._id);
+  return mapGroupConversation(hydratedGroup);
 };
 
 const getGroupDetailsService = async (groupId, currentUserId) => {
@@ -93,7 +106,6 @@ const getGroupDetailsService = async (groupId, currentUserId) => {
     throw new Error("Group not found");
   }
 
-  // Check if user is a member
   const isMember = group.participants.some(
     (p) => String(p._id) === String(currentUserId)
   );
@@ -103,18 +115,8 @@ const getGroupDetailsService = async (groupId, currentUserId) => {
   }
 
   return {
-    id: group._id.toString(),
-    name: group.groupName,
+    ...mapGroupConversation(group),
     description: group.groupDescription,
-    admin: group.groupAdmin,
-    participants: group.participants.map((p) => ({
-      id: p._id.toString(),
-      name: p.name,
-      email: p.email,
-      avatar: p.avatar,
-    })),
-    conversationId: group._id.toString(),
-    isGroup: true,
   };
 };
 
@@ -125,16 +127,16 @@ const addGroupMemberService = async (groupId, userId, currentUserId) => {
     throw new Error("Group not found");
   }
 
-  // Check if current user is admin
   if (String(group.groupAdmin._id) !== String(currentUserId)) {
     throw new Error("Only group admin can add members");
   }
 
-  const updatedGroup = await conversationRepository.addGroupMember(groupId, userId);
+  await conversationRepository.addGroupMember(groupId, userId);
+  const updatedGroup = await conversationRepository.findGroupById(groupId);
 
   return {
-    id: updatedGroup._id.toString(),
-    participants: updatedGroup.participants,
+    ...mapGroupConversation(updatedGroup),
+    description: updatedGroup.groupDescription,
   };
 };
 
@@ -145,7 +147,6 @@ const removeGroupMemberService = async (groupId, userId, currentUserId) => {
     throw new Error("Group not found");
   }
 
-  // Check if current user is admin or removing themselves
   if (
     String(group.groupAdmin._id) !== String(currentUserId) &&
     String(userId) !== String(currentUserId)
@@ -153,11 +154,12 @@ const removeGroupMemberService = async (groupId, userId, currentUserId) => {
     throw new Error("Only group admin can remove members");
   }
 
-  const updatedGroup = await conversationRepository.removeGroupMember(groupId, userId);
+  await conversationRepository.removeGroupMember(groupId, userId);
+  const updatedGroup = await conversationRepository.findGroupById(groupId);
 
   return {
-    id: updatedGroup._id.toString(),
-    participants: updatedGroup.participants,
+    ...mapGroupConversation(updatedGroup),
+    description: updatedGroup.groupDescription,
   };
 };
 
@@ -168,7 +170,6 @@ const updateGroupInfoService = async (groupId, updateData, currentUserId) => {
     throw new Error("Group not found");
   }
 
-  // Check if current user is admin
   if (String(group.groupAdmin._id) !== String(currentUserId)) {
     throw new Error("Only group admin can update group info");
   }
@@ -179,8 +180,7 @@ const updateGroupInfoService = async (groupId, updateData, currentUserId) => {
   );
 
   return {
-    id: updatedGroup._id.toString(),
-    name: updatedGroup.groupName,
+    ...mapGroupConversation(updatedGroup),
     description: updatedGroup.groupDescription,
   };
 };

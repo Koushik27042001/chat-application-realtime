@@ -179,6 +179,10 @@ export const normalizeContact = (contact = {}) => ({
   conversationId: contact.conversationId || null,
   lastMessage: contact.lastMessage || "Tap to start chatting.",
   lastMessageAt: contact.lastMessageAt || null,
+  isGroup: Boolean(contact.isGroup),
+  description: contact.description || "",
+  admin: contact.admin || null,
+  participants: Array.isArray(contact.participants) ? contact.participants : [],
 });
 
 export const upsertContact = (list, contact, { prepend = false } = {}) => {

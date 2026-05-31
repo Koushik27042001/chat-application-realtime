@@ -5,8 +5,9 @@ import { conversationApi } from "../../services/api";
 const GroupMembers = ({ group, currentUserId, token, onMemberRemoved, isOpen, onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const adminId = String(group?.admin?._id || group?.admin?.id || group?.admin || "");
 
-  const isAdmin = group?.admin?._id === currentUserId || group?.admin === currentUserId;
+  const isAdmin = adminId === String(currentUserId);
 
   const handleRemoveMember = useCallback(
     async (memberId) => {
@@ -60,10 +61,11 @@ const GroupMembers = ({ group, currentUserId, token, onMemberRemoved, isOpen, on
         <div className="mb-6 space-y-2">
           {group.participants?.map((member) => {
             const isCurrentUser = member.id === currentUserId || member._id === currentUserId;
-            const isGroupAdmin = member.id === group.admin._id || member._id === group.admin._id;
+            const memberId = String(member.id || member._id || "");
+            const isGroupAdmin = memberId === adminId;
 
             return (
-              <div key={member.id || member._id} className="flex items-center justify-between rounded-lg bg-slate-50 p-4">
+                <div key={member.id || member._id} className="flex items-center justify-between rounded-lg bg-slate-50 p-4">
                 <div className="flex items-center gap-3 flex-1">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-coral/15 font-semibold text-coral">
                     {member.name.slice(0, 1).toUpperCase()}

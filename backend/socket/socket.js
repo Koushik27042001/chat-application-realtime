@@ -45,21 +45,33 @@ const initializeSocket = (io) => {
         });
 
         // ✅ SEND MESSAGE (REAL-TIME)
-        socket.on("private-message", ({ receiverId, message }) => {
-            const receiverSocketId = onlineUsers.get(String(receiverId));
+        socket.on("private-message", ({ receiverId, receiverIds, message }) => {
+            const targets = Array.isArray(receiverIds) && receiverIds.length
+                ? receiverIds
+                : receiverId
+                    ? [receiverId]
+                    : [];
+            const senderId = String(socket.data?.userId || "");
+            const uniqueTargets = Array.from(
+                new Set(targets.map((id) => String(id)).filter((id) => id && id !== senderId))
+            );
 
-            if (receiverSocketId) {
-                io.to(receiverSocketId).emit("receive-message", message);
-            }
+            uniqueTargets.forEach((targetId) => {
+                const receiverSocketId = onlineUsers.get(targetId);
+                if (receiverSocketId) {
+                    io.to(receiverSocketId).emit("receive-message", message);
+                }
+            });
 
-            if (receiverId) {
-                const preview = message?.messageType === "image"
-                    ? "Photo"
-                    : typeof message?.content === "string"
-                        ? message.content.slice(0, 160)
-                        : "New message";
+            const preview = message?.messageType === "image"
+                ? "Photo"
+                : typeof message?.content === "string"
+                    ? message.content.slice(0, 160)
+                    : "New message";
+
+            uniqueTargets.forEach((targetId) => {
                 createAndEmitNotification(io, {
-                    userId: receiverId,
+                    userId: targetId,
                     type: "MESSAGE",
                     content: preview,
                     meta: {
@@ -67,7 +79,7 @@ const initializeSocket = (io) => {
                         conversationId: message?.conversationId,
                     },
                 });
-            }
+            });
         });
 
         // ✅ TYPING (with sender id for UI)

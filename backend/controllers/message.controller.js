@@ -4,15 +4,24 @@ const ApiResponse = require("../utils/apiResponse");
 const { sendMessageService, getMessagesService, markConversationReadService } = require("../services/message.service");
 
 const sendMessage = asyncHandler(async (req, res) => {
-  const { receiverId, content, messageType = "text" } = req.body;
+  const { receiverId, conversationId, content, messageType = "text" } = req.body;
 
-  if (!receiverId || !content) {
+  if (!content || (!receiverId && !conversationId)) {
     return res
       .status(400)
-      .json(new ApiResponse(400, "receiverId and content are required"));
+      .json(new ApiResponse(400, "content and receiverId or conversationId are required"));
   }
 
-  const result = await sendMessageService(req.user.id, receiverId, content, messageType);
+  if (conversationId && !mongoose.Types.ObjectId.isValid(conversationId)) {
+    return res.status(400).json(new ApiResponse(400, "Invalid conversationId"));
+  }
+
+  const result = await sendMessageService(req.user.id, {
+    receiverId,
+    conversationId,
+    content,
+    messageType,
+  });
 
   res.status(201).json(
     new ApiResponse(201, "Message sent", result)
@@ -32,7 +41,12 @@ const getMessages = asyncHandler(async (req, res) => {
     return res.status(400).json(new ApiResponse(400, "Invalid conversationId"));
   }
 
-  const messages = await getMessagesService(conversationId, Number(page), Number(limit));
+  const messages = await getMessagesService(
+    req.user.id,
+    conversationId,
+    Number(page),
+    Number(limit)
+  );
 
   res.status(200).json(
     new ApiResponse(200, "Messages retrieved", messages)
