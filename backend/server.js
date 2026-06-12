@@ -76,7 +76,14 @@ const startServer = async () => {
     await connectDB();
 
     const activePort = await listenOnPort(PORT);
+    const configuredPort = Number(process.env.PORT) || 5000;
     console.log(`Server running on port ${activePort}`);
+    console.log(`API health: http://localhost:${activePort}/api/health`);
+    if (activePort !== configuredPort) {
+      console.warn(
+        `Port ${configuredPort} was in use. Set VITE_BACKEND_PROXY=http://localhost:${activePort} in frontend/.env.development`
+      );
+    }
   } catch (error) {
     console.error("Server failed:", error.message);
     process.exit(1);

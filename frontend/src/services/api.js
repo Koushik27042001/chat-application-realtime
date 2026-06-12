@@ -1,7 +1,9 @@
 import axios from "axios";
 
+/** In dev, default to Vite proxy (`/api`). In prod, set VITE_API_URL to your Render URL. */
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.DEV ? "/api" : "http://localhost:5000/api");
 
 let accessToken = "";
 let refreshPromise = null;
@@ -110,7 +112,11 @@ apiClient.interceptors.response.use(
   }
 );
 
-export const SOCKET_URL = API_BASE_URL.replace(/\/api\/?$/, "");
+export const SOCKET_URL = import.meta.env.VITE_API_URL
+  ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, "")
+  : typeof window !== "undefined"
+    ? window.location.origin
+    : "http://localhost:5000";
 
 export const authApi = {
   register: (payload) => apiClient.post("/auth/register", payload),

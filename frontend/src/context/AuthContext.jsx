@@ -71,6 +71,17 @@ export const AuthProvider = ({ children }) => {
     isMountedRef.current = true;
 
     const restoreSession = async () => {
+      const storedUser = readStoredUser();
+
+      /** Skip refresh when logged out — avoids noisy failed requests on every page load */
+      if (!storedUser) {
+        if (isMountedRef.current) {
+          clearAuthState();
+          setIsHydrated(true);
+        }
+        return;
+      }
+
       try {
         const { data } = await authApi.refresh();
         if (!isMountedRef.current) {
